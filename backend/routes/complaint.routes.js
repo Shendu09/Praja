@@ -1,0 +1,57 @@
+import express from 'express';
+import {
+  createComplaint,
+  getComplaints,
+  getMyComplaints,
+  getComplaint,
+  updateComplaintStatus,
+  addFeedback,
+  upvoteComplaint,
+  getNearbyComplaints,
+  getComplaintStats,
+  getCategories
+} from '../controllers/complaint.controller.js';
+import { protect, authorize, optionalAuth } from '../middleware/auth.middleware.js';
+import { upload, handleMulterError } from '../middleware/upload.middleware.js';
+import {
+  createComplaintValidation,
+  updateComplaintValidation,
+  paginationValidation,
+  idParamValidation
+} from '../middleware/validation.middleware.js';
+
+const router = express.Router();
+
+// Public routes
+router.get('/', paginationValidation, getComplaints);
+router.get('/categories', getCategories);
+router.get('/stats', getComplaintStats);
+router.get('/nearby', getNearbyComplaints);
+
+// Protected routes
+router.post(
+  '/',
+  protect,
+  upload.single('photo'),
+  handleMulterError,
+  createComplaintValidation,
+  createComplaint
+);
+
+router.get('/my', protect, paginationValidation, getMyComplaints);
+
+// Single complaint routes
+router.get('/:id', idParamValidation, optionalAuth, getComplaint);
+router.post('/:id/upvote', protect, idParamValidation, upvoteComplaint);
+router.post('/:id/feedback', protect, idParamValidation, addFeedback);
+
+// Admin routes
+router.put(
+  '/:id/status',
+  protect,
+  authorize('admin', 'moderator'),
+  updateComplaintValidation,
+  updateComplaintStatus
+);
+
+export default router;

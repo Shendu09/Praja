@@ -1,0 +1,26 @@
+{
+  "name": "swachhata-app",
+  "version": "1.0.0",
+  "description": "Swachhata App - Clean India Mission complaint management system",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "install": "npm run install:backend && npm run install:frontend",
+    "install:backend": "cd backend && npm install",
+    "install:frontend": "cd frontend && npm install",
+    "build": "cd frontend && npm run build",
+    "start": "cd backend && npm start"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "keywords": [
+    "swachhata",
+    "clean india",
+    "complaint management",
+    "civic engagement"
+  ],
+  "author": "",
+  "license": "MIT"
+}

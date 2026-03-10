@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useCallback } from 'react';
 import { Package, Clock, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
 import TealHeader from '../TealHeader';
 import { useComplaintsStore, useUIStore } from '../../store';
@@ -15,9 +15,28 @@ export default function ComplaintsScreen() {
   const { myComplaints, fetchMyComplaints, isLoading } = useComplaintsStore();
   const { setScreen, setShowAuthModal } = useUIStore();
 
-  useEffect(() => {
+  // Auto-refresh: poll every 30s + refetch when tab becomes visible
+  const refreshComplaints = useCallback(() => {
     fetchMyComplaints();
-  }, []);
+  }, [fetchMyComplaints]);
+
+  useEffect(() => {
+    refreshComplaints();
+
+    const interval = setInterval(refreshComplaints, 30000);
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        refreshComplaints();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [refreshComplaints]);
 
   const handleNewComplaint = () => {
     setScreen('category');

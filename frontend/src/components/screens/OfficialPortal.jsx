@@ -10,6 +10,7 @@ import {
 import toast from 'react-hot-toast';
 import api from '../../services/api';
 import { useComplaintsStore } from '../../store';
+import { complaintsAPI } from '../../services/api';
 import ComplaintAIAnalyzer from '../ComplaintAIAnalyzer';
 
 // AI Severity Badge Component
@@ -63,7 +64,7 @@ const statusOptions = [
 
 export default function OfficialPortal({ user, onLogout }) {
   // Get complaints from store (includes demo complaints)
-  const { complaints: storeComplaints } = useComplaintsStore();
+  const { complaints: storeComplaints, updateComplaintStatus: storeUpdateStatus } = useComplaintsStore();
   
   const [activeTab, setActiveTab] = useState('pending');
   const [complaints, setComplaints] = useState([]);
@@ -229,12 +230,18 @@ export default function OfficialPortal({ user, onLogout }) {
     };
 
     try {
-      await api.patch(`/complaints/${updateModal._id}/status`, {
+      // Use store action so Zustand state (and citizen side) stays in sync
+      const result = await storeUpdateStatus(updateModal._id, {
         status: updateStatus,
-        remarks: updateRemarks,
+        comment: updateRemarks,
       });
-      
-      toast.success('Status updated successfully!');
+
+      if (result.success) {
+        toast.success('Status updated successfully!');
+      } else {
+        toast.success('Status updated! (Demo Mode)');
+      }
+
       // Update local state with ATR entry
       setComplaints(prev => prev.map(c => 
         c._id === updateModal._id 

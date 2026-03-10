@@ -54,4 +54,13 @@ router.put(
   updateComplaintStatus
 );
 
+// Also allow PATCH for status updates
+router.patch(
+  '/:id/status',
+  protect,
+  authorize('admin', 'moderator'),
+  updateComplaintValidation,
+  updateComplaintStatus
+);
+
 export default router;

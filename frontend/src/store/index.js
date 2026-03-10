@@ -204,6 +204,24 @@ export const useComplaintsStore = create((set, get) => ({
     }
   },
 
+  updateComplaintStatus: async (id, data) => {
+    try {
+      const response = await complaintsAPI.updateStatus(id, data);
+      const updated = response.data;
+      set((state) => ({
+        complaints: state.complaints.map(c =>
+          c._id === id ? { ...c, ...updated } : c
+        ),
+        myComplaints: state.myComplaints.map(c =>
+          c._id === id ? { ...c, ...updated } : c
+        ),
+      }));
+      return { success: true, data: updated };
+    } catch (error) {
+      return { success: false, error: error.error };
+    }
+  },
+
   fetchStats: async () => {
     try {
       const response = await complaintsAPI.getStats();

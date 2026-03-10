@@ -87,6 +87,23 @@ export const createComplaint = asyncHandler(async (req, res) => {
   console.log('\n📨 Notifying Government Officials...');
   const govNotification = await notifyOfficials(complaint, aiAnalysis);
 
+  // Create DB notifications for all active official-role users
+  try {
+    const officials = await User.find({ role: 'official', isActive: true }).select('_id').lean();
+    if (officials.length > 0) {
+      await Notification.insertMany(officials.map(official => ({
+        user: official._id,
+        type: 'new_complaint',
+        title: '🆕 New Complaint',
+        message: `${complaint.complaintId} — ${categoryInfo.label} at ${complaint.location?.city || 'your area'}. Priority: ${aiAnalysis.priority.toUpperCase()}`,
+        data: { complaintId: complaint._id },
+        isRead: false,
+      })));
+    }
+  } catch (e) {
+    console.error('Failed to create official notifications:', e.message);
+  }
+
   // Update user stats
   await User.findByIdAndUpdate(req.user._id, {
     $inc: { complaintsPosted: 1, points: 10 }

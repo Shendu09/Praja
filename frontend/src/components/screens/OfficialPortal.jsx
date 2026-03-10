@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
-import { useComplaintsStore } from '../../store';
+import { useComplaintsStore, useNotificationsStore } from '../../store';
 import { complaintsAPI } from '../../services/api';
 import ComplaintAIAnalyzer from '../ComplaintAIAnalyzer';
 
@@ -65,6 +65,7 @@ const statusOptions = [
 export default function OfficialPortal({ user, onLogout }) {
   // Get complaints from store (includes demo complaints)
   const { complaints: storeComplaints, updateComplaintStatus: storeUpdateStatus } = useComplaintsStore();
+  const { notifications: officialNotifs, unreadCount: notifUnread, fetchNotifications, markAllAsRead: markNotifsRead, markAsRead: markOneRead } = useNotificationsStore();
   
   const [activeTab, setActiveTab] = useState('pending');
   const [complaints, setComplaints] = useState([]);
@@ -77,9 +78,15 @@ export default function OfficialPortal({ user, onLogout }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
+  const [showNotifPanel, setShowNotifPanel] = useState(false);
+  const [mapModal, setMapModal] = useState(null); // { location, complaintId }
 
   useEffect(() => {
     fetchComplaints();
+    fetchNotifications();
+    // Poll notifications every 15 seconds
+    const notifInterval = setInterval(() => fetchNotifications(), 15000);
+    return () => clearInterval(notifInterval);
   }, [storeComplaints]); // Re-fetch when store complaints change
 
   const fetchComplaints = async () => {
@@ -404,6 +411,13 @@ export default function OfficialPortal({ user, onLogout }) {
               <Eye size={14} />
               View Details
             </button>
+            <button
+              onClick={() => setMapModal({ location: complaint.location, complaintId: complaint.complaintId })}
+              className="px-3 py-1.5 text-sm bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors flex items-center gap-1"
+            >
+              <MapPin size={14} />
+              Track Location
+            </button>
             {complaint.status !== 'resolved' && (
               <>
                 <button
@@ -450,10 +464,20 @@ export default function OfficialPortal({ user, onLogout }) {
             >
               <RefreshCcw size={20} />
             </button>
-            <button className="relative p-2 hover:bg-white/10 rounded-lg transition-colors">
-              <Bell size={20} />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
-            </button>
+            {/* Notification Bell */}
+            <div className="relative">
+              <button
+                onClick={() => setShowNotifPanel(v => !v)}
+                className="relative p-2 hover:bg-white/10 rounded-lg transition-colors"
+              >
+                <Bell size={20} />
+                {notifUnread > 0 && (
+                  <span className="absolute top-1 right-1 min-w-[18px] h-[18px] bg-red-500 rounded-full text-[10px] font-bold flex items-center justify-center px-1">
+                    {notifUnread > 9 ? '9+' : notifUnread}
+                  </span>
+                )}
+              </button>
+            </div>
             <div className="flex items-center gap-2">
               <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center">
                 <User size={18} />
@@ -943,6 +967,146 @@ export default function OfficialPortal({ user, onLogout }) {
                     </button>
                   </>
                 )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Notification Panel ─────────────────────────────────────────── */}
+      <AnimatePresence>
+        {showNotifPanel && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-40"
+              onClick={() => setShowNotifPanel(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, y: -10, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -10, scale: 0.97 }}
+              className="fixed top-16 right-4 z-50 w-96 bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden"
+            >
+              <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-green-700 to-emerald-600 text-white">
+                <div className="font-bold flex items-center gap-2">
+                  <Bell size={18} />
+                  Notifications
+                  {notifUnread > 0 && (
+                    <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">{notifUnread} new</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {notifUnread > 0 && (
+                    <button
+                      onClick={() => markNotifsRead()}
+                      className="text-xs text-white/80 hover:text-white underline"
+                    >
+                      Mark all read
+                    </button>
+                  )}
+                  <button onClick={() => setShowNotifPanel(false)}>
+                    <X size={18} />
+                  </button>
+                </div>
+              </div>
+              <div className="max-h-[60vh] overflow-y-auto divide-y divide-gray-100">
+                {officialNotifs.length === 0 ? (
+                  <div className="py-10 text-center text-gray-400">
+                    <Bell size={32} className="mx-auto mb-2 opacity-30" />
+                    <p className="text-sm">No notifications yet</p>
+                  </div>
+                ) : (
+                  officialNotifs.slice(0, 20).map(n => (
+                    <div
+                      key={n._id}
+                      onClick={() => markOneRead(n._id)}
+                      className={`px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors ${!n.isRead ? 'bg-green-50 border-l-4 border-green-500' : ''}`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${
+                          n.type === 'new_complaint' ? 'bg-orange-100' :
+                          n.type === 'complaint_resolved' ? 'bg-green-100' : 'bg-blue-100'
+                        }`}>
+                          {n.type === 'new_complaint' ? '📋' : n.type === 'complaint_resolved' ? '✅' : '🔔'}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-gray-800 truncate">{n.title}</p>
+                          <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{n.message}</p>
+                          <p className="text-[10px] text-gray-400 mt-1">
+                            {new Date(n.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        </div>
+                        {!n.isRead && <div className="w-2 h-2 rounded-full bg-green-500 shrink-0 mt-1.5" />}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* ── Map Tracking Modal ─────────────────────────────────────────── */}
+      <AnimatePresence>
+        {mapModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            onClick={() => setMapModal(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="bg-white rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-5 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
+                <div className="flex items-center gap-2 font-bold">
+                  <MapPin size={18} />
+                  Complaint Location — {mapModal.complaintId}
+                </div>
+                <button onClick={() => setMapModal(null)}>
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="p-4">
+                <div className="font-medium text-gray-700 mb-1">{mapModal.location?.address}</div>
+                <div className="text-sm text-gray-500 mb-3">{mapModal.location?.city}, {mapModal.location?.state} {mapModal.location?.pincode}</div>
+                <div className="rounded-xl overflow-hidden border border-gray-200">
+                  <iframe
+                    src={
+                      mapModal.location?.lat && mapModal.location?.lng
+                        ? `https://maps.google.com/maps?q=${mapModal.location.lat},${mapModal.location.lng}&z=16&output=embed`
+                        : `https://maps.google.com/maps?q=${encodeURIComponent((mapModal.location?.address || '') + ' ' + (mapModal.location?.city || '') + ' India')}&output=embed`
+                    }
+                    width="100%"
+                    height="300"
+                    style={{ border: 0 }}
+                    allowFullScreen=""
+                    loading="lazy"
+                    referrerPolicy="no-referrer-when-downgrade"
+                    title="Grievance Location"
+                  />
+                </div>
+                <a
+                  href={
+                    mapModal.location?.lat && mapModal.location?.lng
+                      ? `https://www.google.com/maps/search/?api=1&query=${mapModal.location.lat},${mapModal.location.lng}`
+                      : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((mapModal.location?.address || '') + ' ' + (mapModal.location?.city || ''))}`
+                  }
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 mt-3 text-sm text-blue-600 hover:underline"
+                >
+                  <Navigation size={14} /> Open in Google Maps <ExternalLink size={12} />
+                </a>
               </div>
             </motion.div>
           </motion.div>

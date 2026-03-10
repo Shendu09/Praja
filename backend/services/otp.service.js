@@ -122,29 +122,73 @@ export const sendEmailOTP = async (email, otp) => {
   }
 };
 
-// Send OTP via SMS (using a webhook/API - you can integrate Twilio, MSG91, etc.)
+// Send OTP via SMS
 export const sendSMSOTP = async (phone, otp) => {
-  // For demo: Log to console
-  // In production: Integrate with SMS provider
   console.log(`📱 SMS OTP for ${phone}: ${otp}`);
-  
-  // Example with MSG91 (Indian SMS provider - popular and affordable)
-  // const url = `https://api.msg91.com/api/v5/otp?template_id=YOUR_TEMPLATE&mobile=${phone}&otp=${otp}`;
-  // await fetch(url, { headers: { 'authkey': process.env.MSG91_AUTH_KEY } });
-  
-  return { success: true };
+
+  // Fast2SMS — easiest Indian SMS provider (no DLT needed for OTP route)
+  // Get free API key at: https://www.fast2sms.com
+  if (process.env.FAST2SMS_API_KEY) {
+    try {
+      const resp = await fetch('https://www.fast2sms.com/dev/bulkV2', {
+        method: 'POST',
+        headers: {
+          authorization: process.env.FAST2SMS_API_KEY,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          route: 'otp',
+          variables_values: otp,
+          numbers: phone,
+        }),
+      });
+      const data = await resp.json();
+      if (data.return === true) {
+        console.log(`✅ SMS sent to ${phone} via Fast2SMS`);
+        return { success: true };
+      }
+      console.error('❌ Fast2SMS error:', data.message);
+    } catch (smsError) {
+      console.error('❌ Fast2SMS failed:', smsError.message);
+    }
+  }
+
+  // MSG91 (Indian SMS provider — requires DLT template registration)
+  // Get credentials at: https://msg91.com
+  if (process.env.MSG91_AUTH_KEY && process.env.MSG91_TEMPLATE_ID) {
+    try {
+      const url = `https://api.msg91.com/api/v5/otp?template_id=${process.env.MSG91_TEMPLATE_ID}&mobile=91${phone}&otp=${otp}`;
+      const resp = await fetch(url, { headers: { authkey: process.env.MSG91_AUTH_KEY } });
+      const data = await resp.json();
+      if (data.type === 'success') {
+        console.log(`✅ SMS sent to ${phone} via MSG91`);
+        return { success: true };
+      }
+    } catch (smsError) {
+      console.error('❌ MSG91 SMS failed:', smsError.message);
+    }
+  }
+
+  // No SMS provider configured — return otp so the route can show it on screen in dev mode
+  return { success: true, otp };
 };
 
 // Combined function to send OTP
 export const sendOTP = async (identifier, type = 'email') => {
   const otp = generateOTP();
   storeOTP(identifier, otp);
-  
+
+  let smsResult = null;
   if (type === 'email') {
     await sendEmailOTP(identifier, otp);
   } else if (type === 'phone') {
-    await sendSMSOTP(identifier, otp);
+    smsResult = await sendSMSOTP(identifier, otp);
   }
-  
-  return { success: true, message: `OTP sent to your ${type}` };
+
+  const result = { success: true, message: `OTP sent to your ${type}` };
+  // Bubble up OTP when SMS provider is not configured (dev visibility)
+  if (type === 'phone' && smsResult?.otp) {
+    result.otp = smsResult.otp;
+  }
+  return result;
 };

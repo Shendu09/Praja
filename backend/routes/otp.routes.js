@@ -18,40 +18,28 @@ router.post('/send', [
       return res.status(400).json({ success: false, errors: errors.array() });
     }
 
-    const { identifier, type, purpose } = req.body;
+    const { identifier, type } = req.body;
 
-    // For registration, check if user already exists
-    if (purpose === 'register') {
-      const existingUser = await User.findOne(
-        type === 'email' ? { email: identifier } : { phone: identifier }
-      );
-      if (existingUser) {
-        return res.status(400).json({
-          success: false,
-          error: `User with this ${type} already exists. Please login instead.`,
-        });
-      }
-    }
-
-    // For login, check if user exists
-    if (purpose === 'login') {
-      const existingUser = await User.findOne(
-        type === 'email' ? { email: identifier } : { phone: identifier }
-      );
-      if (!existingUser) {
-        return res.status(400).json({
-          success: false,
-          error: `No account found with this ${type}. Please register first.`,
-        });
-      }
-    }
+    // Auto-detect whether this is a login or registration flow
+    const existingUser = await User.findOne(
+      type === 'email' ? { email: identifier } : { phone: identifier }
+    );
+    const userExists = !!existingUser;
 
     const result = await sendOTP(identifier, type);
-    
-    res.json({
+
+    const responsePayload = {
       success: true,
       message: `OTP sent to your ${type}`,
-    });
+      userExists,
+    };
+
+    // In development, expose OTP so it can be shown on screen (no SMS credentials needed)
+    if (process.env.NODE_ENV !== 'production' && result.otp) {
+      responsePayload.devOtp = result.otp;
+    }
+
+    res.json(responsePayload);
   } catch (error) {
     console.error('Send OTP error:', error);
     res.status(500).json({
@@ -111,10 +99,15 @@ router.post('/resend', [
     const { identifier, type } = req.body;
     const result = await sendOTP(identifier, type);
 
-    res.json({
+    const responsePayload = {
       success: true,
       message: `New OTP sent to your ${type}`,
-    });
+    };
+    if (process.env.NODE_ENV !== 'production' && result.otp) {
+      responsePayload.devOtp = result.otp;
+    }
+
+    res.json(responsePayload);
   } catch (error) {
     console.error('Resend OTP error:', error);
     res.status(500).json({

@@ -9,7 +9,10 @@ import {
   upvoteComplaint,
   getNearbyComplaints,
   getComplaintStats,
-  getCategories
+  getCategories,
+  escalateComplaint,
+  resolveEscalation,
+  checkDuplicate
 } from '../controllers/complaint.controller.js';
 import { protect, authorize, optionalAuth } from '../middleware/auth.middleware.js';
 import { upload, handleMulterError } from '../middleware/upload.middleware.js';
@@ -28,6 +31,9 @@ router.get('/categories', getCategories);
 router.get('/stats', getComplaintStats);
 router.get('/nearby', getNearbyComplaints);
 
+// Duplicate check route (public, no auth needed for checking)
+router.post('/check-duplicate', checkDuplicate);
+
 // Protected routes
 router.post(
   '/',
@@ -44,6 +50,7 @@ router.get('/my', protect, paginationValidation, getMyComplaints);
 router.get('/:id', idParamValidation, optionalAuth, getComplaint);
 router.post('/:id/upvote', protect, idParamValidation, upvoteComplaint);
 router.post('/:id/feedback', protect, idParamValidation, addFeedback);
+router.post('/:id/escalate', protect, idParamValidation, escalateComplaint);
 
 // Admin routes
 router.put(
@@ -52,6 +59,13 @@ router.put(
   authorize('admin', 'moderator'),
   updateComplaintValidation,
   updateComplaintStatus
+);
+
+router.patch(
+  '/:id/escalation-resolution',
+  protect,
+  authorize('admin'),
+  resolveEscalation
 );
 
 export default router;

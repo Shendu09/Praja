@@ -1,44 +1,92 @@
-import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { useState, useEffect, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   LayoutDashboard, Users, FileText, BarChart3, Settings, 
   LogOut, Bell, Search, Filter, ChevronDown, CheckCircle,
   Clock, AlertTriangle, TrendingUp, Building2, MapPin,
-  Eye, UserPlus, Trash2, Edit
+  Eye, UserPlus, Trash2, Edit, X, User, Calendar,
+  AlertCircle, ArrowUpRight, RefreshCw, Download
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import api from '../../services/api';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  PieChart, Pie, Cell, ResponsiveContainer, LineChart, Line, Area, AreaChart
+} from 'recharts';
+import api, { adminAPI, complaintsAPI } from '../../services/api';
 
 const navItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'complaints', label: 'All Complaints', icon: FileText },
-  { id: 'assign', label: 'Assign Complaints', icon: UserPlus },
   { id: 'officials', label: 'Manage Officials', icon: Users },
-  { id: 'departments', label: 'Departments', icon: Building2 },
   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
 
-const departments = [
-  { id: 'sanitation', name: 'Sanitation', color: 'bg-green-500' },
-  { id: 'roads', name: 'Roads & Infrastructure', color: 'bg-orange-500' },
-  { id: 'water', name: 'Water Supply', color: 'bg-blue-500' },
-  { id: 'electricity', name: 'Electricity', color: 'bg-yellow-500' },
-  { id: 'health', name: 'Public Health', color: 'bg-red-500' },
-  { id: 'environment', name: 'Environment', color: 'bg-teal-500' },
+const departmentOptions = [
+  'Public Works Department',
+  'Water Supply Board',
+  'Electricity Department',
+  'Sanitation Department',
+  'Municipal Corporation',
+  'Transport Department',
+  'Health Department',
+  'Revenue Department'
 ];
+
+const severityColors = {
+  low: 'bg-green-100 text-green-700',
+  medium: 'bg-amber-100 text-amber-700',
+  high: 'bg-orange-100 text-orange-700',
+  critical: 'bg-red-100 text-red-700 animate-pulse'
+};
+
+const statusColors = {
+  Submitted: 'bg-gray-100 text-gray-700',
+  Assigned: 'bg-blue-100 text-blue-700',
+  'In Progress': 'bg-amber-100 text-amber-700',
+  Resolved: 'bg-green-100 text-green-700',
+  Closed: 'bg-gray-200 text-gray-600',
+  Escalated: 'bg-orange-100 text-orange-700',
+  'Final Resolution': 'bg-purple-100 text-purple-700'
+};
+
+const CHART_COLORS = {
+  primary: '#0D4F44',
+  secondary: '#4ade80',
+  submitted: '#94a3b8',
+  assigned: '#3b82f6',
+  inProgress: '#f59e0b',
+  resolved: '#22c55e',
+  closed: '#0D4F44'
+};
 
 export default function AdminPortal({ user, onLogout }) {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [complaints, setComplaints] = useState([]);
+  const [officials, setOfficials] = useState([]);
   const [stats, setStats] = useState(null);
+  const [analytics, setAnalytics] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedComplaint, setSelectedComplaint] = useState(null);
+  const [showAssignModal, setShowAssignModal] = useState(false);
   const [filterStatus, setFilterStatus] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [assignmentForm, setAssignmentForm] = useState({
+    officialId: '',
+    department: '',
+    note: '',
+    priorityOverride: null
+  });
 
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    if (activeTab === 'analytics') {
+      fetchAnalytics();
+    }
+  }, [activeTab]);
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -49,9 +97,16 @@ export default function AdminPortal({ user, onLogout }) {
       ]);
       setComplaints(complaintsRes.data || []);
       setStats(statsRes.data || {});
+      
+      // Fetch officials
+      try {
+        const officialsRes = await adminAPI.getOfficials();
+        setOfficials(officialsRes.data || []);
+      } catch (e) {
+        console.log('Officials fetch failed:', e);
+      }
     } catch (error) {
       console.error('Failed to fetch data:', error);
-      // Mock data for demo
       setStats({
         total: 156,
         pending: 42,
@@ -64,20 +119,127 @@ export default function AdminPortal({ user, onLogout }) {
     }
   };
 
-  const handleAssignComplaint = async (complaintId, department, officerId) => {
+  const fetchAnalytics = async () => {
     try {
-      await api.patch(`/complaints/${complaintId}/assign`, {
-        department,
-        assignedTo: officerId,
-      });
-      toast.success('Complaint assigned successfully!');
-      fetchData();
+      const res = await adminAPI.getAnalytics();
+      setAnalytics(res.data);
     } catch (error) {
-      toast.error('Failed to assign complaint');
+      console.error('Analytics fetch failed:', error);
+      // Set demo data
+      setAnalytics({
+        overview: {
+          totalComplaints: 156,
+          resolvedComplaints: 98,
+          pendingComplaints: 42,
+          inProgressComplaints: 16,
+          totalCitizens: 1250,
+          totalOfficials: 24,
+          avgResolutionDays: 2.4,
+          resolutionRate: 69,
+          escalatedCount: 8,
+          todayNew: 12,
+          todayResolved: 8
+        },
+        byCategory: [
+          { category: 'Dirty Spot', count: 45, resolved: 30 },
+          { category: 'Garbage Dump', count: 38, resolved: 28 },
+          { category: 'Sewerage Overflow', count: 28, resolved: 20 },
+          { category: 'Stagnant Water', count: 22, resolved: 15 },
+          { category: 'Sweeping Issue', count: 15, resolved: 12 },
+          { category: 'Other', count: 8, resolved: 5 }
+        ],
+        byStatus: [
+          { status: 'Submitted', count: 22 },
+          { status: 'Assigned', count: 20 },
+          { status: 'In Progress', count: 16 },
+          { status: 'Resolved', count: 78 },
+          { status: 'Closed', count: 20 }
+        ],
+        bySeverity: [
+          { severity: 'Low', count: 35 },
+          { severity: 'Medium', count: 58 },
+          { severity: 'High', count: 48 },
+          { severity: 'Critical', count: 15 }
+        ],
+        trend: [
+          { date: 'Mon', complaints: 12, resolved: 8 },
+          { date: 'Tue', complaints: 18, resolved: 14 },
+          { date: 'Wed', complaints: 15, resolved: 12 },
+          { date: 'Thu', complaints: 22, resolved: 18 },
+          { date: 'Fri', complaints: 19, resolved: 15 },
+          { date: 'Sat', complaints: 8, resolved: 6 },
+          { date: 'Sun', complaints: 6, resolved: 4 }
+        ],
+        topOfficials: [
+          { name: 'Ravi Kumar', resolved: 23, pending: 4, rating: 4.8 },
+          { name: 'Priya Sharma', resolved: 19, pending: 6, rating: 4.5 },
+          { name: 'Arun Singh', resolved: 15, pending: 3, rating: 4.6 },
+          { name: 'Sunita Devi', resolved: 12, pending: 5, rating: 4.3 },
+          { name: 'Vikram Patel', resolved: 10, pending: 2, rating: 4.7 }
+        ],
+        recentActivity: [
+          { type: 'complaint_submitted', message: 'New complaint: Garbage Dump', time: '2 mins ago', severity: 'high', location: 'Sector 5' },
+          { type: 'complaint_resolved', message: 'Complaint resolved: Water leak', time: '15 mins ago', severity: 'medium', location: 'Ward 3' },
+          { type: 'status_updated', message: 'Status updated: Road repair', time: '32 mins ago', severity: 'low', location: 'MG Road' },
+          { type: 'complaint_submitted', message: 'New complaint: Sewerage overflow', time: '1 hour ago', severity: 'critical', location: 'Old City' }
+        ]
+      });
     }
   };
 
-  const StatCard = ({ title, value, icon: Icon, color, trend }) => (
+  const handleAssignComplaint = async () => {
+    if (!assignmentForm.department) {
+      toast.error('Please select a department');
+      return;
+    }
+
+    try {
+      await adminAPI.assignComplaint(selectedComplaint._id, assignmentForm);
+      toast.success(`Complaint assigned to ${assignmentForm.department}`);
+      setShowAssignModal(false);
+      setSelectedComplaint(null);
+      setAssignmentForm({ officialId: '', department: '', note: '', priorityOverride: null });
+      fetchData();
+    } catch (error) {
+      toast.error(error.error || 'Failed to assign complaint');
+    }
+  };
+
+  const handleResolveEscalation = async (complaintId, remarks, status) => {
+    try {
+      await adminAPI.resolveEscalation(complaintId, { remarks, escalationStatus: status });
+      toast.success('Escalation updated successfully');
+      fetchData();
+    } catch (error) {
+      toast.error('Failed to update escalation');
+    }
+  };
+
+  const openAssignModal = (complaint) => {
+    setSelectedComplaint(complaint);
+    setShowAssignModal(true);
+  };
+
+  const filteredComplaints = complaints.filter(c => {
+    const matchesStatus = filterStatus === 'all' || 
+      (filterStatus === 'unassigned' && (!c.assignedTo && c.status === 'Submitted')) ||
+      (filterStatus === 'escalated' && c.isEscalated) ||
+      c.status?.toLowerCase().replace(' ', '_') === filterStatus;
+    
+    const matchesSearch = !searchQuery || 
+      c.complaintId?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.grv_id?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.categoryLabel?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.location?.address?.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    return matchesStatus && matchesSearch;
+  });
+
+  // Count unassigned and escalated
+  const unassignedCount = complaints.filter(c => !c.assignedTo && c.status === 'Submitted').length;
+  const escalatedCount = complaints.filter(c => c.isEscalated).length;
+
+  const StatCard = ({ title, value, icon: Icon, color, trend, subtitle }) => (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
@@ -88,11 +250,12 @@ export default function AdminPortal({ user, onLogout }) {
           <p className="text-gray-500 text-sm">{title}</p>
           <p className="text-3xl font-bold text-gray-800 mt-1">{value}</p>
           {trend && (
-            <p className="text-xs text-green-600 mt-2 flex items-center gap-1">
+            <p className={`text-xs mt-2 flex items-center gap-1 ${trend.startsWith('+') || trend.startsWith('↑') ? 'text-green-600' : 'text-red-600'}`}>
               <TrendingUp size={12} />
               {trend}
             </p>
           )}
+          {subtitle && <p className="text-xs text-gray-400 mt-1">{subtitle}</p>}
         </div>
         <div className={`w-12 h-12 rounded-xl ${color} flex items-center justify-center`}>
           <Icon size={24} className="text-white" />
@@ -103,78 +266,120 @@ export default function AdminPortal({ user, onLogout }) {
 
   const renderDashboard = () => (
     <div className="space-y-6">
-      {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard 
           title="Total Complaints" 
-          value={stats?.total || 0} 
+          value={stats?.total || analytics?.overview?.totalComplaints || 0} 
           icon={FileText} 
           color="bg-blue-500"
+          trend={`+${analytics?.overview?.todayNew || 0} today`}
         />
         <StatCard 
           title="Pending" 
-          value={stats?.pending || 0} 
+          value={stats?.pending || analytics?.overview?.pendingComplaints || 0} 
           icon={Clock} 
           color="bg-yellow-500"
-          trend="+12% from yesterday"
         />
         <StatCard 
           title="In Progress" 
-          value={stats?.inProgress || 0} 
+          value={stats?.inProgress || analytics?.overview?.inProgressComplaints || 0} 
           icon={AlertTriangle} 
           color="bg-orange-500"
         />
         <StatCard 
           title="Resolved" 
-          value={stats?.resolved || 0} 
+          value={stats?.resolved || analytics?.overview?.resolvedComplaints || 0} 
           icon={CheckCircle} 
           color="bg-green-500"
-          trend="85% resolution rate"
+          trend={`${analytics?.overview?.resolutionRate || 85}% rate`}
         />
       </div>
 
-      {/* Recent Complaints */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-        <div className="p-5 border-b border-gray-100">
-          <h3 className="font-semibold text-gray-800">Recent Complaints</h3>
-        </div>
-        <div className="divide-y divide-gray-100">
-          {complaints.slice(0, 5).map((complaint) => (
-            <div key={complaint._id} className="p-4 flex items-center justify-between hover:bg-gray-50">
-              <div className="flex items-center gap-4">
-                <div className={`w-3 h-3 rounded-full ${
-                  complaint.status === 'resolved' ? 'bg-green-500' :
-                  complaint.status === 'in_progress' ? 'bg-orange-500' : 'bg-yellow-500'
-                }`} />
-                <div>
-                  <p className="font-medium text-gray-800">{complaint.complaintId}</p>
-                  <p className="text-sm text-gray-500">{complaint.categoryLabel}</p>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Recent Complaints */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+          <div className="p-5 border-b border-gray-100 flex justify-between items-center">
+            <h3 className="font-semibold text-gray-800">Recent Complaints</h3>
+            <button 
+              onClick={() => setActiveTab('complaints')}
+              className="text-teal text-sm hover:underline"
+            >
+              View all
+            </button>
+          </div>
+          <div className="divide-y divide-gray-100">
+            {complaints.slice(0, 5).map((complaint) => (
+              <div 
+                key={complaint._id} 
+                className="p-4 flex items-center justify-between hover:bg-gray-50 cursor-pointer"
+                onClick={() => openAssignModal(complaint)}
+              >
+                <div className="flex items-center gap-4">
+                  <div className={`w-3 h-3 rounded-full ${
+                    complaint.status === 'Resolved' || complaint.status === 'resolved' ? 'bg-green-500' :
+                    complaint.status === 'In Progress' || complaint.status === 'in_progress' ? 'bg-orange-500' :
+                    complaint.isEscalated ? 'bg-red-500' : 'bg-yellow-500'
+                  }`} />
+                  <div>
+                    <p className="font-medium text-gray-800">{complaint.grv_id || complaint.complaintId}</p>
+                    <p className="text-sm text-gray-500">{complaint.categoryLabel}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                    !complaint.assignedTo ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
+                  }`}>
+                    {complaint.assignedTo ? 'Assigned' : 'Unassigned'}
+                  </span>
                 </div>
               </div>
-              <div className="text-right">
-                <p className="text-sm text-gray-500">{complaint.location?.city}</p>
-                <p className="text-xs text-gray-400">
-                  {new Date(complaint.createdAt).toLocaleDateString()}
-                </p>
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
 
-      {/* Department Overview */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-        <h3 className="font-semibold text-gray-800 mb-4">Department Status</h3>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          {departments.map((dept) => (
-            <div key={dept.id} className="text-center p-4 rounded-xl bg-gray-50">
-              <div className={`w-10 h-10 ${dept.color} rounded-full mx-auto mb-2`} />
-              <p className="text-sm font-medium text-gray-800">{dept.name}</p>
-              <p className="text-xs text-gray-500 mt-1">
-                {Math.floor(Math.random() * 20) + 5} active
-              </p>
-            </div>
-          ))}
+        {/* Escalated Complaints */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+          <div className="p-5 border-b border-gray-100 flex justify-between items-center">
+            <h3 className="font-semibold text-gray-800 flex items-center gap-2">
+              🚨 Escalated Complaints
+              {escalatedCount > 0 && (
+                <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded-full text-xs">
+                  {escalatedCount}
+                </span>
+              )}
+            </h3>
+          </div>
+          <div className="divide-y divide-gray-100">
+            {complaints.filter(c => c.isEscalated).slice(0, 5).map((complaint) => (
+              <div 
+                key={complaint._id} 
+                className="p-4 hover:bg-orange-50 cursor-pointer"
+                onClick={() => openAssignModal(complaint)}
+              >
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="font-medium text-gray-800">{complaint.grv_id || complaint.complaintId}</p>
+                    <p className="text-sm text-gray-500">{complaint.categoryLabel}</p>
+                    <p className="text-xs text-orange-600 mt-1">
+                      Reason: {complaint.escalationReason?.substring(0, 50)}...
+                    </p>
+                  </div>
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                    complaint.escalationStatus === 'Pending' ? 'bg-orange-100 text-orange-700' :
+                    complaint.escalationStatus === 'Under Review' ? 'bg-blue-100 text-blue-700' :
+                    'bg-purple-100 text-purple-700'
+                  }`}>
+                    {complaint.escalationStatus || 'Pending'}
+                  </span>
+                </div>
+              </div>
+            ))}
+            {complaints.filter(c => c.isEscalated).length === 0 && (
+              <div className="p-8 text-center text-gray-400">
+                No escalated complaints
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -184,18 +389,25 @@ export default function AdminPortal({ user, onLogout }) {
     <div className="bg-white rounded-xl shadow-sm border border-gray-100">
       {/* Filters */}
       <div className="p-4 border-b border-gray-100 flex flex-wrap gap-3 items-center justify-between">
-        <div className="flex gap-2">
-          {['all', 'pending', 'in_progress', 'resolved'].map((status) => (
+        <div className="flex gap-2 flex-wrap">
+          {[
+            { key: 'all', label: 'All' },
+            { key: 'unassigned', label: `Unassigned (${unassignedCount})`, color: 'text-red-600' },
+            { key: 'assigned', label: 'Assigned' },
+            { key: 'in_progress', label: 'In Progress' },
+            { key: 'resolved', label: 'Resolved' },
+            { key: 'escalated', label: `🚨 Escalated (${escalatedCount})`, color: 'text-orange-600' },
+          ].map((item) => (
             <button
-              key={status}
-              onClick={() => setFilterStatus(status)}
+              key={item.key}
+              onClick={() => setFilterStatus(item.key)}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                filterStatus === status
+                filterStatus === item.key
                   ? 'bg-teal text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  : `bg-gray-100 ${item.color || 'text-gray-600'} hover:bg-gray-200`
               }`}
             >
-              {status === 'all' ? 'All' : status.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase())}
+              {item.label}
             </button>
           ))}
         </div>
@@ -203,8 +415,10 @@ export default function AdminPortal({ user, onLogout }) {
           <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
-            placeholder="Search complaints..."
-            className="pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-teal"
+            placeholder="Search by ID, title, location..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-teal w-64"
           />
         </div>
       </div>
@@ -214,103 +428,85 @@ export default function AdminPortal({ user, onLogout }) {
         <table className="w-full">
           <thead className="bg-gray-50">
             <tr>
-              <th className="text-left px-4 py-3 text-sm font-semibold text-gray-600">ID</th>
+              <th className="text-left px-4 py-3 text-sm font-semibold text-gray-600">GRV ID</th>
               <th className="text-left px-4 py-3 text-sm font-semibold text-gray-600">Category</th>
               <th className="text-left px-4 py-3 text-sm font-semibold text-gray-600">Location</th>
               <th className="text-left px-4 py-3 text-sm font-semibold text-gray-600">Status</th>
-              <th className="text-left px-4 py-3 text-sm font-semibold text-gray-600">Priority</th>
+              <th className="text-left px-4 py-3 text-sm font-semibold text-gray-600">AI Severity</th>
+              <th className="text-left px-4 py-3 text-sm font-semibold text-gray-600">Assigned To</th>
+              <th className="text-left px-4 py-3 text-sm font-semibold text-gray-600">Department</th>
               <th className="text-left px-4 py-3 text-sm font-semibold text-gray-600">Date</th>
               <th className="text-left px-4 py-3 text-sm font-semibold text-gray-600">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {complaints
-              .filter(c => filterStatus === 'all' || c.status === filterStatus)
-              .map((complaint) => (
-                <tr key={complaint._id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 text-sm font-medium text-teal">{complaint.complaintId}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{complaint.categoryLabel}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{complaint.location?.city || 'N/A'}</td>
-                  <td className="px-4 py-3">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      complaint.status === 'resolved' ? 'bg-green-100 text-green-700' :
-                      complaint.status === 'in_progress' ? 'bg-orange-100 text-orange-700' :
-                      'bg-yellow-100 text-yellow-700'
-                    }`}>
-                      {complaint.status?.replace('_', ' ')}
+            {filteredComplaints.map((complaint) => (
+              <tr key={complaint._id} className="hover:bg-gray-50">
+                <td className="px-4 py-3 text-sm font-medium text-teal">
+                  {complaint.grv_id || complaint.complaintId}
+                </td>
+                <td className="px-4 py-3 text-sm text-gray-600">{complaint.categoryLabel}</td>
+                <td className="px-4 py-3 text-sm text-gray-600 max-w-[150px] truncate">
+                  {complaint.location?.city || complaint.location?.address?.substring(0, 30) || 'N/A'}
+                </td>
+                <td className="px-4 py-3">
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                    statusColors[complaint.status] || 'bg-gray-100 text-gray-700'
+                  }`}>
+                    {complaint.isEscalated && '🚨 '}{complaint.status}
+                  </span>
+                </td>
+                <td className="px-4 py-3">
+                  <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                    severityColors[complaint.aiVerification?.severity || complaint.priority] || 'bg-gray-100 text-gray-600'
+                  }`}>
+                    {(complaint.aiVerification?.severity || complaint.priority || 'medium').toUpperCase()}
+                  </span>
+                </td>
+                <td className="px-4 py-3">
+                  {complaint.assignedTo ? (
+                    <span className="text-sm text-gray-700">
+                      {typeof complaint.assignedTo === 'object' ? complaint.assignedTo.name : 'Assigned'}
                     </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`text-xs font-bold ${
-                      complaint.priority === 'high' ? 'text-red-600' :
-                      complaint.priority === 'medium' ? 'text-orange-600' : 'text-green-600'
-                    }`}>
-                      {complaint.priority?.toUpperCase() || 'NORMAL'}
+                  ) : (
+                    <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                      Unassigned
                     </span>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-500">
-                    {new Date(complaint.createdAt).toLocaleDateString()}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-2">
-                      <button 
-                        onClick={() => setSelectedComplaint(complaint)}
-                        className="p-1.5 text-gray-400 hover:text-teal hover:bg-teal-50 rounded"
-                      >
-                        <Eye size={16} />
-                      </button>
-                      <button className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded">
-                        <Edit size={16} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                  )}
+                </td>
+                <td className="px-4 py-3 text-sm text-gray-600">
+                  {complaint.assignedDepartment || complaint.department || '—'}
+                </td>
+                <td className="px-4 py-3 text-sm text-gray-500">
+                  {new Date(complaint.createdAt).toLocaleDateString()}
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => openAssignModal(complaint)}
+                      className="p-1.5 text-gray-400 hover:text-teal hover:bg-teal-50 rounded"
+                      title="View & Assign"
+                    >
+                      <Eye size={16} />
+                    </button>
+                    <button 
+                      onClick={() => openAssignModal(complaint)}
+                      className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded"
+                      title="Assign"
+                    >
+                      <UserPlus size={16} />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
-      </div>
-    </div>
-  );
-
-  const renderAssign = () => (
-    <div className="space-y-4">
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-        <h3 className="font-semibold text-gray-800 mb-4">Unassigned Complaints</h3>
-        <div className="space-y-3">
-          {complaints
-            .filter(c => c.status === 'pending' && !c.assignedTo)
-            .slice(0, 10)
-            .map((complaint) => (
-              <div 
-                key={complaint._id}
-                className="p-4 border border-gray-200 rounded-xl flex items-center justify-between"
-              >
-                <div>
-                  <p className="font-medium text-gray-800">{complaint.complaintId}</p>
-                  <p className="text-sm text-gray-500">{complaint.categoryLabel}</p>
-                  <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
-                    <MapPin size={12} />
-                    {complaint.location?.address?.slice(0, 50)}...
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <select 
-                    className="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-teal"
-                    onChange={(e) => handleAssignComplaint(complaint._id, e.target.value, null)}
-                    defaultValue=""
-                  >
-                    <option value="" disabled>Assign to Dept</option>
-                    {departments.map((dept) => (
-                      <option key={dept.id} value={dept.id}>{dept.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            ))}
-          {complaints.filter(c => c.status === 'pending' && !c.assignedTo).length === 0 && (
-            <p className="text-center text-gray-500 py-8">No unassigned complaints</p>
-          )}
-        </div>
+        {filteredComplaints.length === 0 && (
+          <div className="p-8 text-center text-gray-400">
+            No complaints found matching your filters
+          </div>
+        )}
       </div>
     </div>
   );
@@ -325,173 +521,378 @@ export default function AdminPortal({ user, onLogout }) {
         </button>
       </div>
       <div className="p-5">
-        <p className="text-center text-gray-500 py-8">
-          Official management functionality will be added here.
-        </p>
+        {officials.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {officials.map((official) => (
+              <div key={official._id} className="p-4 border border-gray-200 rounded-xl">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-12 h-12 rounded-full bg-teal-100 flex items-center justify-center">
+                    <User size={24} className="text-teal" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-800">{official.name}</p>
+                    <p className="text-sm text-gray-500">{official.email}</p>
+                  </div>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <div>
+                    <p className="text-gray-500">Active</p>
+                    <p className="font-bold text-amber-600">{official.activeComplaints || 0}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">Resolved</p>
+                    <p className="font-bold text-green-600">{official.resolvedComplaints || 0}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">Rating</p>
+                    <p className="font-bold text-blue-600">⭐ {official.avgRating || 'N/A'}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-center text-gray-500 py-8">
+            No officials registered yet. Add officials to start assigning complaints.
+          </p>
+        )}
       </div>
     </div>
   );
 
   const renderAnalytics = () => {
-    // Demo data for analytics
-    const categoryData = [
-      { name: 'Sanitation', count: 45, color: 'bg-green-500' },
-      { name: 'Roads', count: 38, color: 'bg-orange-500' },
-      { name: 'Water', count: 28, color: 'bg-blue-500' },
-      { name: 'Electricity', count: 22, color: 'bg-yellow-500' },
-      { name: 'Health', count: 15, color: 'bg-red-500' },
-      { name: 'Others', count: 8, color: 'bg-gray-500' },
+    const data = analytics || {};
+    const overview = data.overview || {};
+    const byCategory = data.byCategory || [];
+    const byStatus = data.byStatus || [];
+    const bySeverity = data.bySeverity || [];
+    const trend = data.trend || [];
+    const topOfficials = data.topOfficials || [];
+    const recentActivity = data.recentActivity || [];
+
+    const statusChartColors = [
+      CHART_COLORS.submitted,
+      CHART_COLORS.assigned,
+      CHART_COLORS.inProgress,
+      CHART_COLORS.resolved,
+      CHART_COLORS.closed
     ];
 
-    const wardPerformance = [
-      { ward: 'Ward 1', resolved: 85, pending: 12, avg: '2.3 days' },
-      { ward: 'Ward 2', resolved: 72, pending: 18, avg: '3.1 days' },
-      { ward: 'Ward 3', resolved: 91, pending: 8, avg: '1.8 days' },
-      { ward: 'Ward 4', resolved: 65, pending: 25, avg: '4.2 days' },
-      { ward: 'Ward 5', resolved: 78, pending: 15, avg: '2.9 days' },
-    ];
+    const severityChartColors = {
+      'Low': '#22c55e',
+      'Medium': '#f59e0b',
+      'High': '#f97316',
+      'Critical': '#ef4444'
+    };
 
-    const heatmapZones = [
-      { zone: 'Sector 5 - Main Road', issues: 23, type: 'Pothole', recurring: true },
-      { zone: 'Ward 12 - Market', issues: 18, type: 'Garbage', recurring: true },
-      { zone: 'Colony Area', issues: 12, type: 'Street Light', recurring: false },
-      { zone: 'Bus Stand', issues: 15, type: 'Drainage', recurring: true },
-    ];
-
-    const maxCount = Math.max(...categoryData.map(d => d.count));
+    const CustomTooltip = ({ active, payload, label }) => {
+      if (active && payload && payload.length) {
+        return (
+          <div className="bg-gray-900 text-white px-3 py-2 rounded-lg text-sm">
+            <p className="font-medium">{label}</p>
+            {payload.map((entry, index) => (
+              <p key={index} style={{ color: entry.color }}>
+                {entry.name}: {entry.value}
+              </p>
+            ))}
+          </div>
+        );
+      }
+      return null;
+    };
 
     return (
       <div className="space-y-6">
-        {/* Top Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl p-5 text-white">
-            <p className="text-white/70 text-sm">Avg Resolution Time</p>
-            <p className="text-3xl font-bold">2.4 days</p>
-            <p className="text-xs text-green-300 mt-2">↓ 18% from last month</p>
-          </div>
-          <div className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl p-5 text-white">
-            <p className="text-white/70 text-sm">Citizen Satisfaction</p>
-            <p className="text-3xl font-bold">87%</p>
-            <p className="text-xs text-green-300 mt-2">↑ 5% from last month</p>
-          </div>
-          <div className="bg-gradient-to-br from-amber-500 to-orange-600 rounded-xl p-5 text-white">
-            <p className="text-white/70 text-sm">SLA Compliance</p>
-            <p className="text-3xl font-bold">92%</p>
-            <p className="text-xs text-green-300 mt-2">Target: 95%</p>
-          </div>
-          <div className="bg-gradient-to-br from-rose-500 to-pink-600 rounded-xl p-5 text-white">
-            <p className="text-white/70 text-sm">Reopened Cases</p>
-            <p className="text-3xl font-bold">4.2%</p>
-            <p className="text-xs text-green-300 mt-2">↓ 2% from last month</p>
-          </div>
+        {/* Row 1 - Stat Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0 }}
+            className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-5 text-white"
+          >
+            <div className="flex items-center gap-2 text-white/70 text-sm">
+              <FileText size={18} />
+              Total Complaints
+            </div>
+            <p className="text-4xl font-bold mt-2">{overview.totalComplaints || 0}</p>
+            <p className="text-sm text-white/70 mt-2">+{overview.todayNew || 0} today</p>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl p-5 text-white"
+          >
+            <div className="flex items-center gap-2 text-white/70 text-sm">
+              <CheckCircle size={18} />
+              Resolved
+            </div>
+            <p className="text-4xl font-bold mt-2">{overview.resolvedComplaints || 0}</p>
+            <p className="text-sm text-white/70 mt-2">+{overview.todayResolved || 0} today</p>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="bg-gradient-to-br from-amber-500 to-orange-600 rounded-xl p-5 text-white"
+          >
+            <div className="flex items-center gap-2 text-white/70 text-sm">
+              <Clock size={18} />
+              Pending
+            </div>
+            <p className="text-4xl font-bold mt-2">{overview.pendingComplaints || 0}</p>
+            <p className="text-sm text-white/70 mt-2">Needs attention</p>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="bg-gradient-to-br from-purple-500 to-violet-600 rounded-xl p-5 text-white"
+          >
+            <div className="flex items-center gap-2 text-white/70 text-sm">
+              <TrendingUp size={18} />
+              Resolution Rate
+            </div>
+            <p className="text-4xl font-bold mt-2">{overview.resolutionRate || 0}%</p>
+            <p className="text-sm text-white/70 mt-2">Avg: {overview.avgResolutionDays || 0} days</p>
+          </motion.div>
         </div>
 
+        {/* Row 2 - Charts */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Category Distribution */}
+          {/* Bar Chart - Complaints by Category */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
             <h3 className="font-semibold text-gray-800 mb-4">Complaints by Category</h3>
-            <div className="space-y-3">
-              {categoryData.map((cat) => (
-                <div key={cat.name} className="flex items-center gap-3">
-                  <div className="w-24 text-sm text-gray-600">{cat.name}</div>
-                  <div className="flex-1 h-8 bg-gray-100 rounded-full overflow-hidden">
-                    <div 
-                      className={`h-full ${cat.color} rounded-full flex items-center justify-end pr-2`}
-                      style={{ width: `${(cat.count / maxCount) * 100}%` }}
-                    >
-                      <span className="text-xs text-white font-medium">{cat.count}</span>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={byCategory} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
+                <XAxis 
+                  dataKey="category" 
+                  tick={{ fontSize: 11, fill: '#94a3b8' }}
+                  tickLine={false}
+                  axisLine={{ stroke: '#e2e8f0' }}
+                />
+                <YAxis 
+                  tick={{ fontSize: 11, fill: '#94a3b8' }}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <Tooltip content={<CustomTooltip />} />
+                <Legend />
+                <Bar dataKey="count" name="Total" fill={CHART_COLORS.primary} radius={[4, 4, 0, 0]} />
+                <Bar dataKey="resolved" name="Resolved" fill={CHART_COLORS.secondary} radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Donut Chart - Status Distribution */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+            <h3 className="font-semibold text-gray-800 mb-4">Status Distribution</h3>
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <Pie
+                  data={byStatus}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={100}
+                  paddingAngle={2}
+                  dataKey="count"
+                  nameKey="status"
+                  label={({ status, percent }) => `${status} ${(percent * 100).toFixed(0)}%`}
+                  labelLine={false}
+                >
+                  {byStatus.map((entry, index) => (
+                    <Cell 
+                      key={`cell-${index}`} 
+                      fill={statusChartColors[index % statusChartColors.length]} 
+                    />
+                  ))}
+                </Pie>
+                <Tooltip />
+                <Legend layout="vertical" align="right" verticalAlign="middle" />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Row 3 - More Charts */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Line Chart - 7-day Trend */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+            <h3 className="font-semibold text-gray-800 mb-4">7-Day Trend</h3>
+            <ResponsiveContainer width="100%" height={300}>
+              <AreaChart data={trend} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
+                <defs>
+                  <linearGradient id="colorResolved" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#22c55e" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
+                <XAxis 
+                  dataKey="date" 
+                  tick={{ fontSize: 11, fill: '#94a3b8' }}
+                  tickLine={false}
+                  axisLine={{ stroke: '#e2e8f0' }}
+                />
+                <YAxis 
+                  tick={{ fontSize: 11, fill: '#94a3b8' }}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <Tooltip content={<CustomTooltip />} />
+                <Legend />
+                <Line 
+                  type="monotone" 
+                  dataKey="complaints" 
+                  name="Submitted"
+                  stroke="#f59e0b" 
+                  strokeWidth={2}
+                  dot={{ fill: '#f59e0b', strokeWidth: 2 }}
+                  activeDot={{ r: 6 }}
+                />
+                <Area 
+                  type="monotone" 
+                  dataKey="resolved" 
+                  name="Resolved"
+                  stroke="#22c55e" 
+                  strokeWidth={2}
+                  fillOpacity={1}
+                  fill="url(#colorResolved)"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Horizontal Bar Chart - Severity Breakdown */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+            <h3 className="font-semibold text-gray-800 mb-4">Severity Breakdown</h3>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart 
+                data={bySeverity} 
+                layout="vertical"
+                margin={{ top: 20, right: 30, left: 60, bottom: 5 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" horizontal={false} />
+                <XAxis 
+                  type="number"
+                  tick={{ fontSize: 11, fill: '#94a3b8' }}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <YAxis 
+                  type="category"
+                  dataKey="severity"
+                  tick={{ fontSize: 12, fill: '#374151', fontWeight: 500 }}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <Tooltip />
+                <Bar 
+                  dataKey="count" 
+                  radius={[0, 4, 4, 0]}
+                  label={{ position: 'right', fill: '#374151', fontSize: 12 }}
+                >
+                  {bySeverity.map((entry, index) => (
+                    <Cell 
+                      key={`cell-${index}`} 
+                      fill={severityChartColors[entry.severity] || '#94a3b8'} 
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Row 4 - Leaderboard and Activity */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Top Officials Leaderboard */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+            <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
+              🏆 Top Performing Officials
+            </h3>
+            <div className="space-y-4">
+              {topOfficials.map((official, index) => {
+                const medals = ['🥇', '🥈', '🥉'];
+                const maxResolved = topOfficials[0]?.resolved || 1;
+                const progress = (official.resolved / maxResolved) * 100;
+                
+                return (
+                  <div key={index} className="flex items-center gap-4">
+                    <span className="text-2xl w-8">{medals[index] || `${index + 1}.`}</span>
+                    <div className="flex-1">
+                      <div className="flex justify-between mb-1">
+                        <span className="font-medium text-gray-800">{official.name}</span>
+                        <span className="text-sm text-gray-500">{official.resolved} resolved</span>
+                      </div>
+                      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-gradient-to-r from-teal to-emerald-400 rounded-full transition-all"
+                          style={{ width: `${progress}%` }}
+                        />
+                      </div>
+                      <div className="flex justify-between mt-1 text-xs text-gray-400">
+                        <span>{official.pending} pending</span>
+                        <span>⭐ {official.rating}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
+              {topOfficials.length === 0 && (
+                <p className="text-center text-gray-400 py-4">No data available</p>
+              )}
             </div>
           </div>
 
-          {/* Ward Performance */}
+          {/* Recent Activity Feed */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-            <h3 className="font-semibold text-gray-800 mb-4">Ward Performance</h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-gray-500">
-                    <th className="pb-3">Ward</th>
-                    <th className="pb-3">Resolved</th>
-                    <th className="pb-3">Pending</th>
-                    <th className="pb-3">Avg Time</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {wardPerformance.map((ward) => (
-                    <tr key={ward.ward}>
-                      <td className="py-3 font-medium text-gray-800">{ward.ward}</td>
-                      <td className="py-3 text-green-600">{ward.resolved}%</td>
-                      <td className="py-3 text-amber-600">{ward.pending}</td>
-                      <td className="py-3 text-gray-600">{ward.avg}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        {/* Predictive Heatmap / Problem Zones */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="font-semibold text-gray-800">🔥 Problem Zones (AI Predicted)</h3>
-              <p className="text-sm text-gray-500">Areas with recurring issues requiring infrastructure attention</p>
-            </div>
-            <span className="px-3 py-1 bg-red-100 text-red-600 rounded-full text-xs font-medium">
-              Needs attention
-            </span>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {heatmapZones.map((zone, i) => (
-              <div 
-                key={i}
-                className={`p-4 rounded-xl border-2 ${
-                  zone.recurring ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-gray-50'
-                }`}
-              >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="font-semibold text-gray-800">{zone.zone}</p>
-                    <p className="text-sm text-gray-500">{zone.type}</p>
+            <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
+              ⚡ Live Activity
+            </h3>
+            <div className="space-y-3 max-h-[350px] overflow-y-auto">
+              {recentActivity.map((activity, index) => {
+                const icons = {
+                  complaint_submitted: '📋',
+                  complaint_resolved: '✅',
+                  status_updated: '🔄'
+                };
+                const severityDot = {
+                  low: 'bg-green-500',
+                  medium: 'bg-amber-500',
+                  high: 'bg-orange-500',
+                  critical: 'bg-red-500 animate-pulse'
+                };
+                
+                return (
+                  <div 
+                    key={index}
+                    className="p-3 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors"
+                  >
+                    <div className="flex items-start gap-3">
+                      <span className="text-xl">{icons[activity.type] || '📄'}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-gray-800 truncate">{activity.message}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className={`w-2 h-2 rounded-full ${severityDot[activity.severity] || 'bg-gray-400'}`} />
+                          <span className="text-xs text-gray-500">{activity.location}</span>
+                          <span className="text-xs text-gray-400 ml-auto">{activity.time}</span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <span className="text-2xl font-bold text-red-500">{zone.issues}</span>
-                </div>
-                {zone.recurring && (
-                  <p className="text-xs text-red-600 mt-2 flex items-center gap-1">
-                    <AlertTriangle size={12} /> Recurring issue - Consider infrastructure upgrade
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Escalation Matrix */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-          <h3 className="font-semibold text-gray-800 mb-4">⚠️ Auto-Escalation Queue</h3>
-          <p className="text-sm text-gray-500 mb-4">Complaints exceeding 21-day SLA - Will auto-escalate to higher authority</p>
-          <div className="space-y-3">
-            {[
-              { id: 'CMP-2024-0847', days: 24, type: 'Drainage Block', ward: 'Ward 4', escalateTo: 'District Collector' },
-              { id: 'CMP-2024-0832', days: 22, type: 'Road Damage', ward: 'Ward 2', escalateTo: 'PWD Commissioner' },
-              { id: 'CMP-2024-0819', days: 21, type: 'Water Leak', ward: 'Ward 5', escalateTo: 'Water Board Chief' },
-            ].map((item) => (
-              <div key={item.id} className="flex items-center justify-between p-4 bg-amber-50 border border-amber-200 rounded-xl">
-                <div>
-                  <p className="font-medium text-gray-800">{item.id}</p>
-                  <p className="text-sm text-gray-500">{item.type} • {item.ward}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-red-600 font-bold">{item.days} days</p>
-                  <p className="text-xs text-gray-500">→ {item.escalateTo}</p>
-                </div>
-              </div>
-            ))}
+                );
+              })}
+              {recentActivity.length === 0 && (
+                <p className="text-center text-gray-400 py-4">No recent activity</p>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -527,6 +928,11 @@ export default function AdminPortal({ user, onLogout }) {
             >
               <item.icon size={20} />
               <span className="font-medium text-sm">{item.label}</span>
+              {item.id === 'complaints' && escalatedCount > 0 && (
+                <span className="ml-auto bg-orange-500 text-white text-xs px-2 py-0.5 rounded-full">
+                  {escalatedCount}
+                </span>
+              )}
             </button>
           ))}
         </nav>
@@ -551,9 +957,18 @@ export default function AdminPortal({ user, onLogout }) {
             <p className="text-sm text-gray-500">Welcome back, {user?.name || 'Admin'}</p>
           </div>
           <div className="flex items-center gap-4">
+            <button 
+              onClick={fetchData}
+              className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
+              title="Refresh data"
+            >
+              <RefreshCw size={20} />
+            </button>
             <button className="relative p-2 text-gray-400 hover:text-gray-600">
               <Bell size={22} />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
+              {escalatedCount > 0 && (
+                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
+              )}
             </button>
             <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
               <span className="text-purple-600 font-semibold">
@@ -565,72 +980,316 @@ export default function AdminPortal({ user, onLogout }) {
 
         {/* Content */}
         <div className="p-6">
-          {activeTab === 'dashboard' && renderDashboard()}
-          {activeTab === 'complaints' && renderComplaints()}
-          {activeTab === 'assign' && renderAssign()}
-          {activeTab === 'officials' && renderOfficials()}
-          {activeTab === 'departments' && renderOfficials()}
-          {activeTab === 'analytics' && renderAnalytics()}
-          {activeTab === 'settings' && (
-            <div className="bg-white rounded-xl p-5">Settings coming soon...</div>
+          {isLoading ? (
+            <div className="flex items-center justify-center h-64">
+              <div className="animate-spin w-8 h-8 border-4 border-teal border-t-transparent rounded-full" />
+            </div>
+          ) : (
+            <>
+              {activeTab === 'dashboard' && renderDashboard()}
+              {activeTab === 'complaints' && renderComplaints()}
+              {activeTab === 'officials' && renderOfficials()}
+              {activeTab === 'analytics' && renderAnalytics()}
+              {activeTab === 'settings' && (
+                <div className="bg-white rounded-xl p-5">Settings coming soon...</div>
+              )}
+            </>
           )}
         </div>
       </div>
 
-      {/* Complaint Detail Modal */}
-      {selectedComplaint && (
-        <div 
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-          onClick={() => setSelectedComplaint(null)}
-        >
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-white rounded-2xl max-w-lg w-full max-h-[80vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
+      {/* Assignment Modal */}
+      <AnimatePresence>
+        {showAssignModal && selectedComplaint && (
+          <div 
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+            onClick={() => setShowAssignModal(false)}
           >
-            <div className="p-5 border-b border-gray-200">
-              <h3 className="font-bold text-lg">{selectedComplaint.complaintId}</h3>
-            </div>
-            <div className="p-5 space-y-4">
-              {selectedComplaint.photo && (
-                <img 
-                  src={selectedComplaint.photo} 
-                  alt="Complaint" 
-                  className="w-full h-48 object-cover rounded-xl"
-                />
-              )}
-              <div>
-                <p className="text-sm text-gray-500">Category</p>
-                <p className="font-medium">{selectedComplaint.categoryLabel}</p>
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-5 border-b border-gray-200 flex justify-between items-center sticky top-0 bg-white z-10">
+                <div>
+                  <h3 className="font-bold text-lg">{selectedComplaint.grv_id || selectedComplaint.complaintId}</h3>
+                  <p className="text-sm text-gray-500">Complaint Assignment</p>
+                </div>
+                <button 
+                  onClick={() => setShowAssignModal(false)}
+                  className="p-2 hover:bg-gray-100 rounded-lg"
+                >
+                  <X size={20} />
+                </button>
               </div>
-              <div>
-                <p className="text-sm text-gray-500">Description</p>
-                <p className="font-medium">{selectedComplaint.description}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Location</p>
-                <p className="font-medium">{selectedComplaint.location?.address}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">AI Analysis</p>
-                <div className="mt-2 p-3 bg-blue-50 rounded-lg text-sm">
-                  <p>Confidence: {(selectedComplaint.aiVerification?.confidence * 100).toFixed(0)}%</p>
-                  <p>Severity: {selectedComplaint.aiVerification?.severity}</p>
+              
+              <div className="p-5 grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Left Side - Complaint Summary */}
+                <div className="space-y-4">
+                  <h4 className="font-semibold text-gray-800 border-b pb-2">Complaint Details</h4>
+                  
+                  {selectedComplaint.photo && (
+                    <img 
+                      src={selectedComplaint.photo} 
+                      alt="Complaint" 
+                      className="w-full h-48 object-cover rounded-xl"
+                    />
+                  )}
+                  
+                  <div className="flex gap-2 flex-wrap">
+                    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                      statusColors[selectedComplaint.status] || 'bg-gray-100 text-gray-700'
+                    }`}>
+                      {selectedComplaint.status}
+                    </span>
+                    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                      severityColors[selectedComplaint.aiVerification?.severity || selectedComplaint.priority] || 'bg-gray-100 text-gray-600'
+                    }`}>
+                      {(selectedComplaint.aiVerification?.severity || selectedComplaint.priority || 'medium').toUpperCase()}
+                    </span>
+                    {selectedComplaint.isEscalated && (
+                      <span className="px-3 py-1 rounded-full text-xs font-semibold bg-orange-100 text-orange-700">
+                        🚨 ESCALATED
+                      </span>
+                    )}
+                  </div>
+
+                  <div>
+                    <p className="text-sm text-gray-500">Category</p>
+                    <p className="font-medium">{selectedComplaint.categoryLabel}</p>
+                  </div>
+
+                  <div>
+                    <p className="text-sm text-gray-500">Description</p>
+                    <p className="text-gray-700">{selectedComplaint.description}</p>
+                  </div>
+
+                  <div>
+                    <p className="text-sm text-gray-500">Location</p>
+                    <p className="font-medium flex items-center gap-1">
+                      <MapPin size={14} />
+                      {selectedComplaint.location?.address}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      {selectedComplaint.location?.city}, {selectedComplaint.location?.state}
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-gray-500">Submitted By</p>
+                      <p className="font-medium">
+                        {typeof selectedComplaint.user === 'object' 
+                          ? selectedComplaint.user.name 
+                          : 'Citizen'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">Submitted On</p>
+                      <p className="font-medium flex items-center gap-1">
+                        <Calendar size={14} />
+                        {new Date(selectedComplaint.createdAt).toLocaleDateString('en-IN', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric'
+                        })}
+                      </p>
+                    </div>
+                  </div>
+
+                  {selectedComplaint.aiVerification && (
+                    <div className="p-3 bg-blue-50 rounded-lg">
+                      <p className="text-sm font-semibold text-blue-800 mb-2">AI Analysis</p>
+                      <p className="text-sm text-blue-700">
+                        Confidence: {(selectedComplaint.aiVerification.confidence * 100).toFixed(0)}%
+                      </p>
+                      {selectedComplaint.aiVerification.aiNotes && (
+                        <p className="text-sm text-blue-600 mt-1">
+                          {selectedComplaint.aiVerification.aiNotes}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Escalation Details */}
+                  {selectedComplaint.isEscalated && (
+                    <div className="p-3 bg-orange-50 rounded-lg border border-orange-200">
+                      <p className="text-sm font-semibold text-orange-800 mb-2">🚨 Escalation Details</p>
+                      <p className="text-sm text-orange-700">
+                        <strong>Reason:</strong> {selectedComplaint.escalationReason}
+                      </p>
+                      <p className="text-sm text-orange-600 mt-1">
+                        <strong>Status:</strong> {selectedComplaint.escalationStatus || 'Pending'}
+                      </p>
+                      {selectedComplaint.escalationRemarks && (
+                        <p className="text-sm text-orange-600 mt-1">
+                          <strong>Remarks:</strong> {selectedComplaint.escalationRemarks}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Right Side - Assignment Form */}
+                <div className="space-y-4">
+                  <h4 className="font-semibold text-gray-800 border-b pb-2">
+                    {selectedComplaint.isEscalated ? 'Escalation Resolution' : 'Assignment Details'}
+                  </h4>
+
+                  {!selectedComplaint.isEscalated ? (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Department <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                          value={assignmentForm.department}
+                          onChange={(e) => setAssignmentForm(prev => ({ ...prev, department: e.target.value }))}
+                          className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:border-teal"
+                        >
+                          <option value="">Select Department</option>
+                          {departmentOptions.map((dept) => (
+                            <option key={dept} value={dept}>{dept}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Assign to Official
+                        </label>
+                        <select
+                          value={assignmentForm.officialId}
+                          onChange={(e) => setAssignmentForm(prev => ({ ...prev, officialId: e.target.value }))}
+                          className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:border-teal"
+                        >
+                          <option value="">Select Official (Optional)</option>
+                          {officials
+                            .filter(o => !assignmentForm.department || o.department === assignmentForm.department.toLowerCase())
+                            .map((official) => (
+                              <option key={official._id} value={official._id}>
+                                {official.name} ({official.activeComplaints || 0} active)
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Assignment Note (Optional)
+                        </label>
+                        <textarea
+                          value={assignmentForm.note}
+                          onChange={(e) => setAssignmentForm(prev => ({ ...prev, note: e.target.value }))}
+                          placeholder="Add instructions for the official..."
+                          className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:border-teal h-24 resize-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Priority Override
+                        </label>
+                        <div className="flex gap-2">
+                          {['low', 'medium', 'high', 'critical'].map((priority) => (
+                            <button
+                              key={priority}
+                              onClick={() => setAssignmentForm(prev => ({ 
+                                ...prev, 
+                                priorityOverride: prev.priorityOverride === priority ? null : priority 
+                              }))}
+                              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                                assignmentForm.priorityOverride === priority
+                                  ? priority === 'low' ? 'bg-green-500 text-white' :
+                                    priority === 'medium' ? 'bg-amber-500 text-white' :
+                                    priority === 'high' ? 'bg-orange-500 text-white' :
+                                    'bg-red-500 text-white'
+                                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                              }`}
+                            >
+                              {priority.charAt(0).toUpperCase() + priority.slice(1)}
+                            </button>
+                          ))}
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Current: {(selectedComplaint.aiVerification?.severity || selectedComplaint.priority || 'medium').toUpperCase()}
+                        </p>
+                      </div>
+                    </>
+                  ) : (
+                    /* Escalation Resolution Form */
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Escalation Status
+                        </label>
+                        <select
+                          value={assignmentForm.escalationStatus || selectedComplaint.escalationStatus || 'Pending'}
+                          onChange={(e) => setAssignmentForm(prev => ({ ...prev, escalationStatus: e.target.value }))}
+                          className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:border-teal"
+                        >
+                          <option value="Pending">Pending</option>
+                          <option value="Under Review">Under Review</option>
+                          <option value="Final Resolution">Final Resolution</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Resolution Remarks <span className="text-red-500">*</span>
+                        </label>
+                        <textarea
+                          value={assignmentForm.escalationRemarks || ''}
+                          onChange={(e) => setAssignmentForm(prev => ({ ...prev, escalationRemarks: e.target.value }))}
+                          placeholder="Provide detailed resolution remarks..."
+                          className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:border-teal h-32 resize-none"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
-            </div>
-            <div className="p-5 border-t border-gray-200">
-              <button 
-                onClick={() => setSelectedComplaint(null)}
-                className="w-full py-3 bg-gray-100 text-gray-700 rounded-xl font-medium"
-              >
-                Close
-              </button>
-            </div>
-          </motion.div>
-        </div>
-      )}
+
+              <div className="p-5 border-t border-gray-200 flex justify-end gap-3 sticky bottom-0 bg-white">
+                <button 
+                  onClick={() => {
+                    setShowAssignModal(false);
+                    setAssignmentForm({ officialId: '', department: '', note: '', priorityOverride: null });
+                  }}
+                  className="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200"
+                >
+                  Cancel
+                </button>
+                {selectedComplaint.isEscalated ? (
+                  <button 
+                    onClick={() => handleResolveEscalation(
+                      selectedComplaint._id, 
+                      assignmentForm.escalationRemarks,
+                      assignmentForm.escalationStatus || 'Under Review'
+                    )}
+                    disabled={!assignmentForm.escalationRemarks}
+                    className="px-6 py-3 bg-orange-500 text-white rounded-xl font-medium hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    <CheckCircle size={18} />
+                    Submit Resolution
+                  </button>
+                ) : (
+                  <button 
+                    onClick={handleAssignComplaint}
+                    disabled={!assignmentForm.department}
+                    className="px-6 py-3 bg-teal text-white rounded-xl font-medium hover:bg-teal-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    <ArrowUpRight size={18} />
+                    Assign Complaint
+                  </button>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

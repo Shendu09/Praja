@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { BrowserRouter, Routes, Route, useParams, useNavigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AnimatePresence } from 'framer-motion';
 import { useAuthStore, useUIStore, useComplaintsStore } from './store';
@@ -9,6 +10,7 @@ import RoleSelectionScreen from './components/screens/RoleSelectionScreen';
 import OTPAuthScreen from './components/screens/OTPAuthScreen';
 import AdminPortal from './components/screens/AdminPortal';
 import OfficialPortal from './components/screens/OfficialPortal';
+import MobileRatingScreen from './components/screens/MobileRatingScreen';
 
 // Citizen Portal Components
 import PhoneShell from './components/PhoneShell';
@@ -18,12 +20,13 @@ import ComplaintFormScreen from './components/screens/ComplaintFormScreen';
 import NotificationsScreen from './components/screens/NotificationsScreen';
 import ComplaintsScreen from './components/screens/ComplaintsScreen';
 import ProfileScreen from './components/screens/ProfileScreen';
-import RateServiceScreen from './components/screens/RateServiceScreen';
+import RateServiceScreen, { PublicRatingPage } from './components/screens/RateServiceScreen';
 import CommunityScreen from './components/screens/CommunityScreen';
 import QuizScreen from './components/screens/QuizScreen';
 import BottomNav from './components/BottomNav';
 
-function App() {
+// Main App Component (handles state-based navigation)
+function MainApp() {
   const { checkAuth, isAuthenticated, user, setUser, logout } = useAuthStore();
   const { currentScreen, showAuthModal, setShowAuthModal, switchRoleRequested, clearSwitchRoleRequest } = useUIStore();
   const { fetchCategories } = useComplaintsStore();
@@ -31,7 +34,21 @@ function App() {
   // App flow states
   const [showSplash, setShowSplash] = useState(true);
   const [selectedRole, setSelectedRole] = useState(null);
-  const [appScreen, setAppScreen] = useState('splash'); // splash, roleSelect, auth, portal
+  const [appScreen, setAppScreen] = useState('splash'); // splash, roleSelect, auth, portal, publicRating
+  const [publicRatingServiceId, setPublicRatingServiceId] = useState(null);
+
+  // Check for public rating URL parameter on mount
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const rateServiceId = urlParams.get('rate');
+    
+    if (rateServiceId) {
+      // Set public rating mode
+      setPublicRatingServiceId(rateServiceId);
+      setShowSplash(false);
+      setAppScreen('publicRating');
+    }
+  }, []);
 
   // Listen for switch role requests from ProfileScreen
   useEffect(() => {
@@ -134,6 +151,22 @@ function App() {
 
   // Main render
   const renderApp = () => {
+    // Show public rating page if accessed via QR code URL
+    if (appScreen === 'publicRating' && publicRatingServiceId) {
+      return (
+        <PublicRatingPage 
+          serviceId={publicRatingServiceId} 
+          onClose={() => {
+            // Clear URL parameter and go to home
+            window.history.replaceState({}, document.title, window.location.pathname);
+            setPublicRatingServiceId(null);
+            setShowSplash(false);
+            setAppScreen('roleSelect');
+          }}
+        />
+      );
+    }
+
     // Show splash
     if (showSplash) {
       return <SplashScreen onComplete={handleSplashComplete} />;
@@ -190,6 +223,21 @@ function App() {
         {renderApp()}
       </AnimatePresence>
     </div>
+  );
+}
+
+// Main App with Router
+function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        {/* QR Code Rating Route - Standalone page for mobile scanning */}
+        <Route path="/rate/:serviceId" element={<MobileRatingScreen />} />
+        
+        {/* Main App Route - All other paths */}
+        <Route path="/*" element={<MainApp />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
 

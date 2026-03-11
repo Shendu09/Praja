@@ -59,6 +59,25 @@ export const complaintsAPI = {
   getNearby: (params) => api.get('/complaints/nearby', { params }),
   getStats: () => api.get('/complaints/stats'),
   getCategories: () => api.get('/complaints/categories'),
+  escalate: (id, data) => api.post(`/complaints/${id}/escalate`, data),
+};
+
+// Admin API
+export const adminAPI = {
+  // Assignment
+  assignComplaint: (complaintId, data) => api.post(`/admin/complaints/${complaintId}/assign`, data),
+  bulkAssign: (data) => api.post('/admin/complaints/bulk-assign', data),
+  getOfficials: (params) => api.get('/admin/officials', { params }),
+  getAssignmentStats: () => api.get('/admin/assignment-stats'),
+  
+  // Analytics
+  getAnalytics: () => api.get('/admin/analytics'),
+  getDepartmentAnalytics: () => api.get('/admin/analytics/departments'),
+  getLocationAnalytics: () => api.get('/admin/analytics/locations'),
+  exportAnalytics: (params) => api.get('/admin/analytics/export', { params }),
+  
+  // Escalation resolution
+  resolveEscalation: (id, data) => api.patch(`/complaints/${id}/escalation-resolution`, data),
 };
 
 // Users API

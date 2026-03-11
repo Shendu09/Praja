@@ -11,6 +11,9 @@ import authRoutes from './routes/auth.routes.js';
 import complaintRoutes from './routes/complaint.routes.js';
 import userRoutes from './routes/user.routes.js';
 import otpRoutes from './routes/otp.routes.js';
+import assignmentRoutes from './routes/assignment.routes.js';
+import analyticsRoutes from './routes/analytics.routes.js';
+import serviceRoutes from './routes/service.routes.js';
 import { errorHandler, notFound } from './middleware/error.middleware.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -34,9 +37,24 @@ const limiter = rateLimit({
 });
 app.use('/api', limiter);
 
-// CORS configuration
+// Trust proxy for correct IP detection behind ngrok
+app.set('trust proxy', true);
+
+// CORS configuration - allows ngrok URLs
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175', 'http://localhost:3000'],
+  origin: function(origin, callback) {
+    // Allow requests with no origin (mobile apps, curl, etc)
+    if (!origin) return callback(null, true);
+    
+    // Allow localhost
+    if (origin.includes('localhost')) return callback(null, true);
+    
+    // Allow ngrok URLs
+    if (origin.includes('ngrok')) return callback(null, true);
+    
+    // Allow any origin for QR code scanning from mobile
+    callback(null, true);
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -59,6 +77,9 @@ app.use('/api/auth', authRoutes);
 app.use('/api/complaints', complaintRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/otp', otpRoutes);
+app.use('/api/admin', assignmentRoutes);
+app.use('/api/admin/analytics', analyticsRoutes);
+app.use('/api/services', serviceRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

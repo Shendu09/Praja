@@ -5,12 +5,218 @@ import {
   LogOut, Bell, Search, MapPin, Camera, MessageSquare,
   AlertTriangle, Send, ChevronRight, User, Calendar, Filter,
   Eye, Navigation, Activity, TrendingUp, RefreshCcw, X,
-  AlertCircle, ExternalLink, BarChart3
+  AlertCircle, ExternalLink, BarChart3, Loader, Clipboard,
+  Wrench, Zap, ChevronDown, ChevronUp, Sparkles
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
 import { useComplaintsStore } from '../../store';
 import ComplaintAIAnalyzer from '../ComplaintAIAnalyzer';
+
+// Gemini API for AI Assistant
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`;
+
+// AI Assistant Component for Officials
+const AIAssistantPanel = ({ complaint, onUseATR }) => {
+  const [isLoading, setIsLoading] = useState(false);
+  const [aiPlan, setAiPlan] = useState(null);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [error, setError] = useState(null);
+
+  const fetchAIPlan = async () => {
+    if (!complaint) return;
+    
+    setIsLoading(true);
+    setError(null);
+    
+    const daysPending = Math.floor((Date.now() - new Date(complaint.createdAt).getTime()) / (1000 * 60 * 60 * 24));
+    
+    const prompt = `You are an assistant helping a government official resolve a civic complaint in India.
+
+Complaint Details:
+Category: ${complaint.categoryLabel || complaint.category || 'General'}
+Title: ${complaint.title || 'Civic Issue Reported'}
+Description: ${complaint.description || 'No description provided'}
+Severity: ${complaint.aiVerification?.severity || complaint.priority || 'medium'}
+Location: ${complaint.location?.address || 'Not specified'}
+Days Pending: ${daysPending}
+AI Estimated Cost: ${complaint.aiData?.estimatedCostINR || 'Not estimated'}
+
+Return ONLY this JSON with no markdown:
+{
+  "immediateSteps": ["step 1", "step 2", "step 3"],
+  "requiredResources": ["resource 1", "resource 2", "resource 3"],
+  "estimatedCompletionDays": 3,
+  "suggestedATR": "ready-to-use official Action Taken Report text that describes what action was initiated",
+  "preventionAdvice": "how to prevent this issue in future",
+  "escalationRisk": "low or medium or high - likelihood citizen will escalate if not resolved soon"
+}`;
+
+    try {
+      const res = await fetch(GEMINI_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.2, maxOutputTokens: 800 }
+        })
+      });
+
+      const data = await res.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      
+      // Parse JSON from response
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        setAiPlan(JSON.parse(jsonMatch[0]));
+      } else {
+        throw new Error('Could not parse AI response');
+      }
+    } catch (err) {
+      console.error('AI Assistant error:', err);
+      setError('Could not generate AI recommendations');
+      // Provide fallback suggestions
+      setAiPlan({
+        immediateSteps: ['Acknowledge the complaint', 'Dispatch inspection team', 'Assess damage and required repairs'],
+        requiredResources: ['Inspection team', 'Basic repair materials', 'Safety barriers'],
+        estimatedCompletionDays: 3,
+        suggestedATR: `Complaint acknowledged. Inspection team dispatched to ${complaint.location?.address || 'the reported location'}. Assessment underway. Expected resolution within 3 working days.`,
+        preventionAdvice: 'Regular maintenance and periodic inspections can help prevent similar issues.',
+        escalationRisk: daysPending > 5 ? 'high' : daysPending > 3 ? 'medium' : 'low'
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleCopyATR = () => {
+    if (aiPlan?.suggestedATR) {
+      navigator.clipboard.writeText(aiPlan.suggestedATR);
+      toast.success('ATR copied to clipboard!');
+      if (onUseATR) onUseATR(aiPlan.suggestedATR);
+    }
+  };
+
+  return (
+    <div className="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl border border-purple-200 overflow-hidden">
+      <button
+        onClick={() => {
+          setIsExpanded(!isExpanded);
+          if (!aiPlan && !isLoading) fetchAIPlan();
+        }}
+        className="w-full flex items-center justify-between p-4 hover:bg-purple-100/50 transition-colors"
+      >
+        <span className="flex items-center gap-2 font-medium text-purple-700">
+          <Sparkles size={18} />
+          🤖 AI Action Assistant
+        </span>
+        {isExpanded ? <ChevronUp size={18} className="text-purple-500" /> : <ChevronDown size={18} className="text-purple-500" />}
+      </button>
+
+      {isExpanded && (
+        <div className="p-4 pt-0 space-y-4">
+          {isLoading ? (
+            <div className="text-center py-6">
+              <Loader size={24} className="animate-spin mx-auto text-purple-500 mb-2" />
+              <p className="text-sm text-purple-600">Generating AI recommendations...</p>
+            </div>
+          ) : aiPlan ? (
+            <>
+              {/* Immediate Steps */}
+              <div className="bg-white rounded-lg p-3">
+                <p className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                  <Zap size={14} className="text-orange-500" />
+                  Immediate Steps
+                </p>
+                <div className="space-y-2">
+                  {aiPlan.immediateSteps?.map((step, i) => (
+                    <div key={i} className="flex items-start gap-2 text-sm text-gray-600">
+                      <span className="w-5 h-5 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                        {i + 1}
+                      </span>
+                      <span>{step}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Required Resources */}
+              <div className="bg-white rounded-lg p-3">
+                <p className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                  <Wrench size={14} className="text-gray-500" />
+                  Required Resources
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {aiPlan.requiredResources?.map((resource, i) => (
+                    <span key={i} className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs">
+                      • {resource}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Estimates Row */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-white rounded-lg p-3 text-center">
+                  <p className="text-xs text-gray-500">Est. Completion</p>
+                  <p className="text-lg font-bold text-gray-800">{aiPlan.estimatedCompletionDays} days</p>
+                </div>
+                <div className="bg-white rounded-lg p-3 text-center">
+                  <p className="text-xs text-gray-500">Escalation Risk</p>
+                  <p className={`text-lg font-bold ${
+                    aiPlan.escalationRisk === 'high' ? 'text-red-600' :
+                    aiPlan.escalationRisk === 'medium' ? 'text-yellow-600' :
+                    'text-green-600'
+                  }`}>
+                    {aiPlan.escalationRisk === 'high' ? '🔴 High' :
+                     aiPlan.escalationRisk === 'medium' ? '🟡 Medium' :
+                     '🟢 Low'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Suggested ATR */}
+              <div className="bg-white rounded-lg p-3">
+                <p className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                  <Clipboard size={14} className="text-blue-500" />
+                  AI-Generated ATR
+                </p>
+                <p className="text-sm text-gray-600 italic bg-gray-50 p-2 rounded border">
+                  "{aiPlan.suggestedATR}"
+                </p>
+                <button
+                  onClick={handleCopyATR}
+                  className="mt-2 w-full py-2 bg-gradient-to-r from-purple-500 to-indigo-500 text-white rounded-lg text-sm font-medium hover:from-purple-600 hover:to-indigo-600 transition-all flex items-center justify-center gap-2"
+                >
+                  <Clipboard size={14} />
+                  📋 Use AI-Generated ATR
+                </button>
+              </div>
+
+              {/* Prevention Advice */}
+              {aiPlan.preventionAdvice && (
+                <div className="bg-white rounded-lg p-3">
+                  <p className="text-sm font-medium text-gray-700 mb-1">💡 Prevention Advice</p>
+                  <p className="text-xs text-gray-500">{aiPlan.preventionAdvice}</p>
+                </div>
+              )}
+
+              {error && (
+                <p className="text-xs text-amber-600 text-center">
+                  ⚠️ Using cached recommendations. {error}
+                </p>
+              )}
+            </>
+          ) : (
+            <div className="text-center py-4">
+              <p className="text-sm text-gray-500">Click to generate AI recommendations</p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 // AI Severity Badge Component
 const AISeverityBadge = ({ severity, confidence }) => {
@@ -845,6 +1051,15 @@ export default function OfficialPortal({ user, onLogout }) {
                     </div>
                   </div>
                 )}
+
+                {/* AI Assistant Panel for Officials */}
+                <AIAssistantPanel 
+                  complaint={selectedComplaint}
+                  onUseATR={(atr) => {
+                    // Can be used to pre-fill ATR in update modal
+                    toast.success('ATR ready to use!');
+                  }}
+                />
                 
                 {/* ATR History Timeline */}
                 {selectedComplaint.atrHistory && selectedComplaint.atrHistory.length > 0 && (

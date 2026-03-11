@@ -1,19 +1,29 @@
 import { useState, useRef, useEffect } from 'react';
-import { Camera, MapPin, Info, Check, Crosshair, Loader, Shield, AlertTriangle, Building, Sparkles, XCircle } from 'lucide-react';
+import { Camera, MapPin, Info, Check, Crosshair, Loader, Shield, AlertTriangle, Building, Sparkles, XCircle, Eye, Clock, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
 import TealHeader from '../TealHeader';
 import { useUIStore, useComplaintsStore, useAuthStore } from '../../store';
 import { getLocationWithAddress } from '../../services/location';
 import { useImageAnalysis } from '../../hooks/useImageAnalysis';
+import LocationMap from '../LocationMap';
+import api from '../../services/api';
 
 export default function ComplaintFormScreen() {
   const { selectedCategory, setScreen, setActiveTab } = useUIStore();
   const { createComplaint, isLoading } = useComplaintsStore();
   const { updateUser, user } = useAuthStore();
   
-  // AI Image Analysis Hook
-  const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY;
-  const { analyze: analyzeImage, isAnalyzing, result: geminiResult, error: geminiError, reset: resetAnalysis } = useImageAnalysis(geminiApiKey);
+  // Advanced AI Image Analysis Hook (no longer needs API key parameter)
+  const { 
+    analyze: analyzeImage, 
+    isAnalyzing, 
+    result: geminiResult, 
+    error: geminiError, 
+    reset: resetAnalysis,
+    status: analysisStatus,
+    progress: analysisProgress,
+    statusMessage 
+  } = useImageAnalysis();
   
   const [description, setDescription] = useState('');
   const [photo, setPhoto] = useState(null);
@@ -30,7 +40,32 @@ export default function ComplaintFormScreen() {
   const [locationError, setLocationError] = useState(null);
   const [aiResult, setAiResult] = useState(null);
   const [aiVisionResult, setAiVisionResult] = useState(null);
+  const [duplicateComplaints, setDuplicateComplaints] = useState([]);
+  const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
+  const [showLocationMap, setShowLocationMap] = useState(false);
   const fileRef = useRef();
+
+  // Check for duplicates when location and AI result are available
+  useEffect(() => {
+    const checkDuplicates = async () => {
+      if (aiVisionResult?.isCivicIssue && location.coordinates[0] !== 0) {
+        try {
+          const response = await api.post('/complaints/check-duplicate', {
+            aiCategory: aiVisionResult.category,
+            latitude: location.coordinates[1], // lat is second in [lng, lat]
+            longitude: location.coordinates[0]
+          });
+          if (response.data?.hasDuplicate) {
+            setDuplicateComplaints(response.data.complaints);
+            setShowDuplicateWarning(true);
+          }
+        } catch (error) {
+          console.warn('Duplicate check failed:', error);
+        }
+      }
+    };
+    checkDuplicates();
+  }, [aiVisionResult, location.coordinates]);
 
   // Get real location on mount
   useEffect(() => {
@@ -279,6 +314,17 @@ export default function ComplaintFormScreen() {
     );
   }
 
+  // Handle location change from LocationMap
+  const handleLocationChange = (newLocation) => {
+    setLocation({
+      coordinates: [newLocation.lng, newLocation.lat],
+      address: newLocation.address,
+      city: newLocation.city || location.city,
+      state: newLocation.state || location.state,
+      pincode: newLocation.pincode || location.pincode,
+    });
+  };
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       <TealHeader
@@ -287,32 +333,85 @@ export default function ComplaintFormScreen() {
       />
 
       <div className="flex-1 overflow-y-auto pb-20">
-        {/* Map placeholder */}
-        <div className="h-44 bg-gradient-to-br from-green-100 to-green-200 flex items-center justify-center relative overflow-hidden">
-          <div
-            className="absolute inset-0"
-            style={{
-              backgroundImage: `
-                linear-gradient(rgba(42,157,143,0.08) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(42,157,143,0.08) 1px, transparent 1px)
-              `,
-              backgroundSize: '28px 28px',
-            }}
-          />
-          <div className="text-center z-10">
-            {isLocating ? (
-              <Loader size={42} className="text-teal mx-auto animate-spin" />
-            ) : (
-              <MapPin size={42} className="text-teal mx-auto" />
-            )}
-            <div className="text-xs text-teal font-semibold mt-1">
-              {isLocating ? 'Detecting...' : 'Your Location'}
+        {/* Duplicate Warning Banner */}
+        {showDuplicateWarning && duplicateComplaints.length > 0 && (
+          <div className="mx-4 mt-4 bg-amber-50 border border-amber-300 rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <AlertTriangle size={20} className="text-amber-600" />
+              <span className="font-bold text-amber-800">Similar Complaint Already Reported</span>
             </div>
+            {duplicateComplaints.map((complaint, index) => (
+              <div key={index} className="bg-white rounded-lg p-3 mb-2 border border-amber-200">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <span className="text-sm font-medium text-gray-800">
+                      {complaint.grv_id || complaint.complaintId}
+                    </span>
+                    <span className="ml-2 text-xs text-gray-500">• {complaint.categoryLabel}</span>
+                  </div>
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                    complaint.status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
+                    complaint.status === 'Resolved' ? 'bg-green-100 text-green-700' :
+                    'bg-gray-100 text-gray-700'
+                  }`}>
+                    {complaint.status}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-600 mt-1 line-clamp-2">{complaint.description}</p>
+                <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
+                  <span>📍 {complaint.distanceText}</span>
+                  <span>📅 {complaint.daysAgo} days ago</span>
+                </div>
+              </div>
+            ))}
+            <div className="flex gap-2 mt-3">
+              <button
+                onClick={() => setShowDuplicateWarning(false)}
+                className="flex-1 py-2 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600 transition-colors"
+              >
+                File Anyway as New Complaint
+              </button>
+              <button
+                onClick={() => {
+                  setScreen('complaints');
+                  setActiveTab('complaints');
+                }}
+                className="flex-1 py-2 bg-white border border-amber-300 text-amber-700 rounded-lg text-sm font-medium hover:bg-amber-50 transition-colors"
+              >
+                View Existing Complaints
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Interactive Location Map */}
+        <div className="px-4 pt-4">
+          <LocationMap
+            latitude={location.coordinates[1]}
+            longitude={location.coordinates[0]}
+            address={location.address}
+            aiLocationClues={aiVisionResult?.locationClues}
+            onLocationChange={handleLocationChange}
+            readonly={false}
+          />
+        </div>
+
+        {/* Old Map placeholder - keeping as fallback mini indicator */}
+        <div className="mx-4 mt-3 h-12 bg-gradient-to-br from-green-100 to-green-200 flex items-center justify-between px-4 rounded-xl relative overflow-hidden">
+          <div className="flex items-center gap-2 z-10">
+            {isLocating ? (
+              <Loader size={18} className="text-teal animate-spin" />
+            ) : (
+              <MapPin size={18} className="text-teal" />
+            )}
+            <span className="text-xs text-teal font-medium">
+              {isLocating ? 'Detecting location...' : 'Location confirmed'}
+            </span>
           </div>
           <button 
             onClick={handleRefreshLocation}
             disabled={isLocating}
-            className="absolute top-2.5 right-2.5 w-9 h-9 bg-white border border-gray-300 rounded-lg flex items-center justify-center shadow-sm hover:bg-gray-50 transition-colors disabled:opacity-50"
+            className="w-8 h-8 bg-white border border-gray-300 rounded-lg flex items-center justify-center shadow-sm hover:bg-gray-50 transition-colors disabled:opacity-50 z-10"
           >
             <Crosshair size={18} className={`text-gray-600 ${isLocating ? 'animate-pulse' : ''}`} />
           </button>

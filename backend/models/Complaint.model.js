@@ -6,6 +6,10 @@ const complaintSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
+  grv_id: {
+    type: String,
+    unique: true
+  },
   category: {
     type: String,
     required: [true, 'Please select a category'],
@@ -62,21 +66,45 @@ const complaintSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['pending', 'in_progress', 'resolved', 'rejected', 'closed'],
-    default: 'pending'
+    enum: ['Submitted', 'Assigned', 'In Progress', 'Resolved', 'Closed', 'Escalated', 'Final Resolution'],
+    default: 'Submitted'
   },
   priority: {
     type: String,
-    enum: ['low', 'medium', 'high', 'urgent'],
+    enum: ['low', 'medium', 'high', 'critical'],
     default: 'medium'
   },
   assignedTo: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
+    ref: 'User',
+    default: null
+  },
+  assignedDepartment: {
+    type: String,
+    enum: [
+      'Public Works Department',
+      'Water Supply Board', 
+      'Electricity Department',
+      'Sanitation Department',
+      'Municipal Corporation',
+      'Transport Department',
+      'Health Department',
+      'Revenue Department',
+      null
+    ],
+    default: null
+  },
+  assignedAt: {
+    type: Date,
+    default: null
+  },
+  assignmentNote: {
+    type: String,
+    default: ''
   },
   department: {
     type: String,
-    enum: ['sanitation', 'health', 'municipal', 'environment', 'other'],
+    enum: ['sanitation', 'health', 'municipal', 'environment', 'roads', 'water', 'electricity', 'other'],
     default: 'sanitation'
   },
   timeline: [{
@@ -108,6 +136,41 @@ const complaintSchema = new mongoose.Schema({
     },
     comment: String,
     submittedAt: Date
+  },
+  feedbackRating: {
+    type: Number,
+    min: 1,
+    max: 5,
+    default: null
+  },
+  feedbackText: {
+    type: String,
+    default: ''
+  },
+  isSatisfied: {
+    type: Boolean,
+    default: null
+  },
+  isEscalated: {
+    type: Boolean,
+    default: false
+  },
+  escalationReason: {
+    type: String,
+    default: ''
+  },
+  escalatedAt: {
+    type: Date,
+    default: null
+  },
+  escalationStatus: {
+    type: String,
+    enum: ['Pending', 'Under Review', 'Final Resolution', null],
+    default: null
+  },
+  escalationRemarks: {
+    type: String,
+    default: ''
   },
   isAnonymous: {
     type: Boolean,
@@ -161,7 +224,7 @@ const complaintSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Generate unique complaint ID before save
+// Generate unique complaint ID and GRV ID before save
 complaintSchema.pre('save', async function(next) {
   if (!this.complaintId) {
     const date = new Date();
@@ -169,6 +232,11 @@ complaintSchema.pre('save', async function(next) {
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const count = await mongoose.model('Complaint').countDocuments() + 1;
     this.complaintId = `SWC${year}${month}${String(count).padStart(6, '0')}`;
+  }
+  if (!this.grv_id) {
+    const year = new Date().getFullYear();
+    const count = await mongoose.model('Complaint').countDocuments() + 1;
+    this.grv_id = `GRV-${year}-${String(count).padStart(5, '0')}`;
   }
   next();
 });
@@ -193,6 +261,9 @@ complaintSchema.index({ status: 1, createdAt: -1 });
 complaintSchema.index({ category: 1, status: 1 });
 complaintSchema.index({ 'location.city': 1, status: 1 });
 complaintSchema.index({ complaintId: 1 });
+complaintSchema.index({ grv_id: 1 });
+complaintSchema.index({ assignedTo: 1, status: 1 });
+complaintSchema.index({ isEscalated: 1, escalationStatus: 1 });
 
 const Complaint = mongoose.model('Complaint', complaintSchema);
 

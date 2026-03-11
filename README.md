@@ -212,14 +212,7 @@ MIT License - Feel free to use for your Smart India Hackathon projects!
 4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
 
-## 📞 Contact
 
-- GitHub: [@Shendu09](https://github.com/Shendu09)
-- Project Link: [https://github.com/Shendu09/Praja](https://github.com/Shendu09/Praja)
-
----
-
-Made with ❤️ for Digital India 🇮🇳
 │   │   ├── User.model.js
 │   │   ├── Complaint.model.js
 │   │   └── Notification.model.js

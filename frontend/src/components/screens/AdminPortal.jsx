@@ -61,11 +61,14 @@ const CHART_COLORS = {
   closed: '#0D4F44'
 };
 
-// ─── helpers to read & clear the shared demo-notification log ──────────────
-const DEMO_NOTIF_KEY = 'praja_demo_notifications';
-function loadDemoNotifs() {
-  try { return JSON.parse(localStorage.getItem(DEMO_NOTIF_KEY) || '[]'); } catch { return []; }
-}
+// ─── Shared localStorage helpers ─────────────────────────────────────────────
+const DEMO_NOTIF_KEY      = 'praja_demo_notifications';
+const DEMO_COMPLAINTS_KEY = 'praja_demo_complaints';
+const ADMIN_SETTINGS_KEY  = 'praja_admin_settings';
+function loadDemoNotifs()           { try { return JSON.parse(localStorage.getItem(DEMO_NOTIF_KEY)      || '[]'); } catch { return []; } }
+function loadAdminDemoComplaints()  { try { return JSON.parse(localStorage.getItem(DEMO_COMPLAINTS_KEY) || '[]'); } catch { return []; } }
+function loadAdminSettings()        { try { return JSON.parse(localStorage.getItem(ADMIN_SETTINGS_KEY)  || '{}'); } catch { return {}; } }
+function saveAdminSettings(s)       { try { localStorage.setItem(ADMIN_SETTINGS_KEY, JSON.stringify(s)); } catch {} }
 function timeAgo(isoStr) {
   const diff = Math.floor((Date.now() - new Date(isoStr)) / 1000);
   if (diff < 60) return `${diff}s ago`;
@@ -73,7 +76,7 @@ function timeAgo(isoStr) {
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
   return new Date(isoStr).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 }
-// ────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 
 export default function AdminPortal({ user, onLogout }) {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -201,35 +204,52 @@ export default function AdminPortal({ user, onLogout }) {
     setIsLoading(true);
     try {
       const [complaintsRes, statsRes] = await Promise.all([
-        api.get('/complaints?limit=100'),
+        api.get('/complaints', { params: { limit: 200, order: 'desc' } }),
         api.get('/complaints/stats'),
       ]);
+
+      // complaintsRes is the full body { success, data: [...], pagination: {} }
       const list = complaintsRes.data || [];
       setComplaints(list);
-      setStats(statsRes.data || {});
-      // Detect new complaints since last fetch and add to activity feed
+
+      // statsRes.data = { total, resolvedToday, byStatus: { pending: N, ... }, topCategories: [...] }
+      const s = statsRes.data || {};
+      const byStatus = s.byStatus || {};
+      const normalised = {
+        total:      s.total || list.length,
+        pending:    (byStatus.pending || 0) + (byStatus.Pending || 0),
+        inProgress: (byStatus.in_progress || 0) + (byStatus['In Progress'] || 0) +
+                    (byStatus.acknowledged || 0) + (byStatus.under_inspection || 0) +
+                    (byStatus.work_scheduled || 0),
+        resolved:   (byStatus.resolved || 0) + (byStatus.Resolved || 0) +
+                    (byStatus.closed || 0) + (byStatus.Closed || 0),
+        todayNew:   s.resolvedToday || 0,
+      };
+      setStats(normalised);
+
+      // Detect new complaints since last fetch
       if (prevComplaintCount.current > 0 && list.length > prevComplaintCount.current) {
         setBellUnread(prev => prev + (list.length - prevComplaintCount.current));
       }
       prevComplaintCount.current = list.length;
       buildActivityFeed(list);
-      
+
       // Fetch officials
       try {
         const officialsRes = await adminAPI.getOfficials();
         setOfficials(officialsRes.data || []);
       } catch (e) {
-        console.log('Officials fetch failed:', e);
+        console.log('Officials fetch failed (normal if no admin route):', e.message);
       }
     } catch (error) {
-      console.error('Failed to fetch data:', error);
-      // API unavailable (demo mode) — load from shared localStorage
+      console.error('fetchData failed:', error);
+      // Demo / offline fallback — load from shared localStorage
       const demoComplaints = loadAdminDemoComplaints();
       setComplaints(demoComplaints);
-      const total = demoComplaints.length;
-      const pending = demoComplaints.filter(c => ['pending', 'Pending', 'Submitted'].includes(c.status)).length;
-      const inProg  = demoComplaints.filter(c => ['in_progress', 'In Progress', 'acknowledged', 'under_inspection', 'work_scheduled'].includes(c.status)).length;
-      const resolvd = demoComplaints.filter(c => ['resolved', 'Resolved', 'closed', 'Closed'].includes(c.status)).length;
+      const total   = demoComplaints.length;
+      const pending = demoComplaints.filter(c => ['pending','Pending','Submitted'].includes(c.status)).length;
+      const inProg  = demoComplaints.filter(c => ['in_progress','In Progress','acknowledged','under_inspection','work_scheduled'].includes(c.status)).length;
+      const resolvd = demoComplaints.filter(c => ['resolved','Resolved','closed','Closed'].includes(c.status)).length;
       setStats({ total, pending, inProgress: inProg, resolved: resolvd, todayNew: 0 });
       buildActivityFeed(demoComplaints);
     } finally {
@@ -333,29 +353,56 @@ export default function AdminPortal({ user, onLogout }) {
     }
   };
 
+  // Admin directly updates a complaint's status
+  const handleAdminStatusUpdate = async (complaintId, newStatus, remarks = '') => {
+    try {
+      await complaintsAPI.updateStatus(complaintId, { status: newStatus, comment: remarks });
+      toast.success(`Status updated to "${newStatus}"`);
+      // Optimistic update
+      setComplaints(prev => prev.map(c =>
+        c._id === complaintId ? { ...c, status: newStatus } : c
+      ));
+      if (selectedComplaint?._id === complaintId) {
+        setSelectedComplaint(prev => ({ ...prev, status: newStatus }));
+      }
+      fetchData();
+    } catch (err) {
+      toast.error(err.error || err.message || 'Failed to update status');
+    }
+  };
+
   const openAssignModal = (complaint) => {
     setSelectedComplaint(complaint);
     setShowAssignModal(true);
   };
 
   const filteredComplaints = complaints.filter(c => {
-    const matchesStatus = filterStatus === 'all' || 
-      (filterStatus === 'unassigned' && (!c.assignedTo && c.status === 'Submitted')) ||
-      (filterStatus === 'escalated' && c.isEscalated) ||
-      c.status?.toLowerCase().replace(' ', '_') === filterStatus;
-    
-    const matchesSearch = !searchQuery || 
-      c.complaintId?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.grv_id?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.categoryLabel?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.location?.address?.toLowerCase().includes(searchQuery.toLowerCase());
-    
+    const st = (c.status || '').toLowerCase().replace(/[_ ]/g, '_');
+    const matchesStatus = filterStatus === 'all'
+      || (filterStatus === 'unassigned' && !c.assignedTo && ['pending','submitted','acknowledged'].includes(st))
+      || (filterStatus === 'escalated' && c.isEscalated)
+      || (filterStatus === 'assigned'   && c.assignedTo)
+      || (filterStatus === 'in_progress' && ['in_progress','under_inspection','work_scheduled','acknowledged'].includes(st))
+      || (filterStatus === 'resolved'    && ['resolved','closed','final_resolution'].includes(st));
+
+    const q = searchQuery.toLowerCase();
+    const matchesSearch = !q
+      || c.complaintId?.toLowerCase().includes(q)
+      || c.grv_id?.toLowerCase().includes(q)
+      || (c.grv_id || '').toLowerCase().replace(/[^a-z0-9]/g,'').includes(q.replace(/[^a-z0-9]/g,''))
+      || c.categoryLabel?.toLowerCase().includes(q)
+      || c.location?.address?.toLowerCase().includes(q)
+      || c.location?.city?.toLowerCase().includes(q)
+      || (typeof c.user === 'object' ? c.user?.name?.toLowerCase().includes(q) : false)
+      || c.description?.toLowerCase().includes(q);
+
     return matchesStatus && matchesSearch;
   });
 
   // Count unassigned and escalated
-  const unassignedCount = complaints.filter(c => !c.assignedTo && c.status === 'Submitted').length;
+  const unassignedCount = complaints.filter(c => !c.assignedTo && ['pending','Pending','Submitted','acknowledged'].includes(c.status)).length;
   const escalatedCount = complaints.filter(c => c.isEscalated).length;
+
 
   const StatCard = ({ title, value, icon: Icon, color, trend, subtitle }) => (
     <motion.div
@@ -382,35 +429,78 @@ export default function AdminPortal({ user, onLogout }) {
     </motion.div>
   );
 
-  const renderDashboard = () => (
+  const renderDashboard = () => {
+    const totalCount   = stats?.total    || complaints.length || 0;
+    const pendingCount = stats?.pending  || complaints.filter(c => ['pending','Pending','Submitted'].includes(c.status)).length || 0;
+    const inProgCount  = stats?.inProgress || complaints.filter(c => ['In Progress','in_progress','acknowledged','under_inspection','work_scheduled'].includes(c.status)).length || 0;
+    const resolvedCnt  = stats?.resolved || complaints.filter(c => ['resolved','Resolved','closed','Closed'].includes(c.status)).length || 0;
+    const resolutionRate = totalCount > 0 ? Math.round((resolvedCnt / totalCount) * 100) : 0;
+
+    return (
     <div className="space-y-6">
+      {/* Search bar */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex gap-3 items-center">
+        <Search size={20} className="text-gray-400 flex-shrink-0" />
+        <input
+          type="text"
+          placeholder="Search complaint by ID, GRV number, category, citizen name or location…"
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          className="flex-1 text-sm focus:outline-none text-gray-700 placeholder-gray-400"
+        />
+        {searchQuery && (
+          <button onClick={() => setSearchQuery('')} className="text-gray-400 hover:text-gray-600 text-xs flex-shrink-0">
+            Clear
+          </button>
+        )}
+        {searchQuery && (
+          <button
+            onClick={() => { setActiveTab('complaints'); }}
+            className="px-3 py-1.5 bg-teal text-white rounded-lg text-xs font-medium flex-shrink-0"
+          >
+            View results ({filteredComplaints.length})
+          </button>
+        )}
+      </div>
+
+      {/* Search results preview (inline on dashboard) */}
+      {searchQuery && (
+        <div className="bg-white rounded-xl shadow-sm border border-teal/30">
+          <div className="p-4 border-b border-gray-100 flex justify-between items-center">
+            <p className="font-semibold text-gray-800 text-sm">
+              Search results for "{searchQuery}" — {filteredComplaints.length} found
+            </p>
+            <button onClick={() => { setActiveTab('complaints'); }} className="text-xs text-teal hover:underline">
+              Open in All Complaints →
+            </button>
+          </div>
+          <div className="divide-y divide-gray-50 max-h-52 overflow-y-auto">
+            {filteredComplaints.slice(0, 6).map(c => (
+              <div key={c._id} className="px-4 py-3 flex items-center gap-3 hover:bg-gray-50 cursor-pointer" onClick={() => openAssignModal(c)}>
+                <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${['resolved','Resolved','closed','Closed'].includes(c.status) ? 'bg-green-500' : c.isEscalated ? 'bg-red-500' : 'bg-amber-500'}`} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-teal">{c.grv_id || c.complaintId}</p>
+                  <p className="text-xs text-gray-500 truncate">{c.categoryLabel} · {c.location?.address?.substring(0, 40) || c.location?.city}</p>
+                </div>
+                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColors[c.status] || 'bg-gray-100 text-gray-600'}`}>{c.status}</span>
+              </div>
+            ))}
+            {filteredComplaints.length === 0 && (
+              <div className="p-6 text-center text-gray-400 text-sm">No complaints match your search</div>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard 
-          title="Total Complaints" 
-          value={stats?.total || analytics?.overview?.totalComplaints || 0} 
-          icon={FileText} 
-          color="bg-blue-500"
-          trend={`+${analytics?.overview?.todayNew || 0} today`}
-        />
-        <StatCard 
-          title="Pending" 
-          value={stats?.pending || analytics?.overview?.pendingComplaints || 0} 
-          icon={Clock} 
-          color="bg-yellow-500"
-        />
-        <StatCard 
-          title="In Progress" 
-          value={stats?.inProgress || analytics?.overview?.inProgressComplaints || 0} 
-          icon={AlertTriangle} 
-          color="bg-orange-500"
-        />
-        <StatCard 
-          title="Resolved" 
-          value={stats?.resolved || analytics?.overview?.resolvedComplaints || 0} 
-          icon={CheckCircle} 
-          color="bg-green-500"
-          trend={`${analytics?.overview?.resolutionRate || 85}% rate`}
-        />
+        <StatCard title="Total Complaints" value={totalCount} icon={FileText} color="bg-blue-500"
+          trend={`+${complaints.filter(c => { const d = new Date(c.createdAt); const today = new Date(); return d.toDateString() === today.toDateString(); }).length} today`} />
+        <StatCard title="Pending" value={pendingCount} icon={Clock} color="bg-yellow-500"
+          subtitle={unassignedCount > 0 ? `${unassignedCount} unassigned` : 'All assigned'} />
+        <StatCard title="In Progress" value={inProgCount} icon={AlertTriangle} color="bg-orange-500"
+          subtitle={escalatedCount > 0 ? `${escalatedCount} escalated` : ''} />
+        <StatCard title="Resolved" value={resolvedCnt} icon={CheckCircle} color="bg-green-500"
+          trend={`${resolutionRate}% rate`} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -418,42 +508,49 @@ export default function AdminPortal({ user, onLogout }) {
         <div className="bg-white rounded-xl shadow-sm border border-gray-100">
           <div className="p-5 border-b border-gray-100 flex justify-between items-center">
             <h3 className="font-semibold text-gray-800">Recent Complaints</h3>
-            <button 
-              onClick={() => setActiveTab('complaints')}
-              className="text-teal text-sm hover:underline"
-            >
-              View all
+            <button onClick={() => setActiveTab('complaints')} className="text-teal text-sm hover:underline">
+              View all ({complaints.length})
             </button>
           </div>
           <div className="divide-y divide-gray-100">
-            {complaints.slice(0, 5).map((complaint) => (
-              <div 
-                key={complaint._id} 
-                className="p-4 flex items-center justify-between hover:bg-gray-50 cursor-pointer"
-                onClick={() => openAssignModal(complaint)}
-              >
-                <div className="flex items-center gap-4">
-                  <div className={`w-3 h-3 rounded-full ${
-                    complaint.status === 'Resolved' || complaint.status === 'resolved' ? 'bg-green-500' :
-                    complaint.status === 'In Progress' || complaint.status === 'in_progress' ? 'bg-orange-500' :
-                    complaint.isEscalated ? 'bg-red-500' : 'bg-yellow-500'
-                  }`} />
-                  <div>
-                    <p className="font-medium text-gray-800">{complaint.grv_id || complaint.complaintId}</p>
-                    <p className="text-sm text-gray-500">{complaint.categoryLabel}</p>
+            {[...complaints].sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 6).map((complaint) => {
+              const isResolved = ['resolved','Resolved','closed','Closed'].includes(complaint.status);
+              const isInProg   = ['in_progress','In Progress','acknowledged','under_inspection','work_scheduled'].includes(complaint.status);
+              const dotCls     = isResolved ? 'bg-green-500' : isInProg ? 'bg-orange-500' : complaint.isEscalated ? 'bg-red-500 animate-pulse' : 'bg-yellow-500';
+              const timeAgo    = (() => {
+                if (!complaint.createdAt) return '';
+                const diff = Date.now() - new Date(complaint.createdAt).getTime();
+                const m = Math.floor(diff/60000);
+                if (m < 60) return `${m}m ago`;
+                const h = Math.floor(m/60);
+                if (h < 24) return `${h}h ago`;
+                return `${Math.floor(h/24)}d ago`;
+              })();
+              return (
+                <div key={complaint._id} className="p-4 flex items-center gap-3 hover:bg-gray-50 cursor-pointer" onClick={() => openAssignModal(complaint)}>
+                  <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${dotCls}`} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-semibold text-teal">{complaint.grv_id || complaint.complaintId}</p>
+                      {complaint.isEscalated && <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full font-bold">ESC</span>}
+                    </div>
+                    <p className="text-xs text-gray-500 truncate">
+                      {complaint.categoryLabel} · {complaint.user?.name || complaint.citizenName || 'Citizen'} · {complaint.location?.city || ''}
+                    </p>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColors[complaint.status] || 'bg-gray-100 text-gray-600'}`}>{complaint.status}</span>
+                    <p className="text-[10px] text-gray-400 mt-0.5">{timeAgo}</p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                    !complaint.assignedTo ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
-                  }`}>
-                    {complaint.assignedTo ? 'Assigned' : 'Unassigned'}
-                  </span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
             {complaints.length === 0 && (
-              <div className="p-8 text-center text-gray-400">No complaints yet</div>
+              <div className="p-8 text-center">
+                <FileText size={32} className="mx-auto mb-2 text-gray-200" />
+                <p className="text-sm text-gray-400">No complaints yet</p>
+                <p className="text-xs text-gray-300 mt-1">Complaints filed by citizens will appear here</p>
+              </div>
             )}
           </div>
         </div>
@@ -566,6 +663,7 @@ export default function AdminPortal({ user, onLogout }) {
       </div>
     </div>
   );
+  };
 
   const renderComplaints = () => (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100">
@@ -830,9 +928,30 @@ export default function AdminPortal({ user, onLogout }) {
 
   const renderAnalytics = () => {
     const data = analytics || {};
-    const overview = data.overview || {};
-    const byCategory = data.byCategory || [];
-    const byStatus = data.byStatus || [];
+    // Merge live stats into overview so real data always wins
+    const overview = {
+      ...(data.overview || {}),
+      totalComplaints:      stats?.total      || data.overview?.totalComplaints    || complaints.length,
+      pendingComplaints:    stats?.pending    || data.overview?.pendingComplaints  || 0,
+      inProgressComplaints: stats?.inProgress || data.overview?.inProgressComplaints || 0,
+      resolvedComplaints:   stats?.resolved   || data.overview?.resolvedComplaints  || 0,
+    };
+    // Build live byCategory and byStatus from complaints array when API analytics fails
+    const byCategory = data.byCategory?.length > 0 ? data.byCategory : (() => {
+      const map = {};
+      complaints.forEach(c => {
+        const k = c.categoryLabel || c.category || 'Other';
+        if (!map[k]) map[k] = { category: k, count: 0, resolved: 0 };
+        map[k].count++;
+        if (['resolved','Resolved','closed','Closed'].includes(c.status)) map[k].resolved++;
+      });
+      return Object.values(map).sort((a,b) => b.count - a.count).slice(0, 6);
+    })();
+    const byStatus = data.byStatus?.length > 0 ? data.byStatus : (() => {
+      const map = {};
+      complaints.forEach(c => { map[c.status] = (map[c.status]||0)+1; });
+      return Object.entries(map).map(([status, count]) => ({ status, count }));
+    })();
     const bySeverity = data.bySeverity || [];
     const trend = data.trend || [];
     const topOfficials = data.topOfficials || [];
@@ -1613,8 +1732,36 @@ export default function AdminPortal({ user, onLogout }) {
                 {/* Right Side - Assignment Form */}
                 <div className="space-y-4">
                   <h4 className="font-semibold text-gray-800 border-b pb-2">
-                    {selectedComplaint.isEscalated ? 'Escalation Resolution' : 'Assignment Details'}
+                    {selectedComplaint.isEscalated ? 'Escalation Resolution' : 'Assignment & Status Update'}
                   </h4>
+
+                  {/* Admin Direct Status Update (always visible) */}
+                  {!selectedComplaint.isEscalated && (
+                    <div className="p-3 bg-teal/5 border border-teal/20 rounded-xl space-y-2">
+                      <p className="text-xs font-semibold text-teal uppercase tracking-wide">Admin Status Override</p>
+                      <div className="flex gap-2 flex-wrap">
+                        {[
+                          { label: 'Pending',      value: 'pending',          cls: 'bg-yellow-100 text-yellow-700 border-yellow-200' },
+                          { label: 'Acknowledge',  value: 'acknowledged',     cls: 'bg-blue-100 text-blue-700 border-blue-200' },
+                          { label: 'In Progress',  value: 'in_progress',      cls: 'bg-orange-100 text-orange-700 border-orange-200' },
+                          { label: 'Inspecting',   value: 'under_inspection', cls: 'bg-purple-100 text-purple-700 border-purple-200' },
+                          { label: 'Scheduled',    value: 'work_scheduled',   cls: 'bg-indigo-100 text-indigo-700 border-indigo-200' },
+                          { label: 'Resolved',     value: 'resolved',         cls: 'bg-green-100 text-green-700 border-green-200' },
+                          { label: 'Rejected',     value: 'rejected',         cls: 'bg-red-100 text-red-700 border-red-200' },
+                        ].map(opt => (
+                          <button
+                            key={opt.value}
+                            disabled={selectedComplaint.status === opt.value}
+                            onClick={() => handleAdminStatusUpdate(selectedComplaint._id, opt.value)}
+                            className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-opacity ${opt.cls} ${selectedComplaint.status === opt.value ? 'opacity-40 cursor-not-allowed' : 'hover:opacity-80 cursor-pointer'}`}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-[10px] text-gray-400">Current: <span className="font-semibold">{selectedComplaint.status}</span></p>
+                    </div>
+                  )}
 
                   {!selectedComplaint.isEscalated ? (
                     <>

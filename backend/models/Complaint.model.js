@@ -66,7 +66,13 @@ const complaintSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['Submitted', 'Assigned', 'In Progress', 'Resolved', 'Closed', 'Escalated', 'Final Resolution'],
+    enum: [
+      // Title-case (set by assignment controller)
+      'Submitted', 'Assigned', 'In Progress', 'Resolved', 'Closed', 'Escalated', 'Final Resolution',
+      // Lowercase (set by updateComplaintStatus controller & official portal)
+      'pending', 'submitted', 'acknowledged', 'assigned', 'in_progress',
+      'under_inspection', 'work_scheduled', 'resolved', 'rejected', 'closed', 'final_resolution'
+    ],
     default: 'Submitted'
   },
   priority: {
@@ -82,14 +88,12 @@ const complaintSchema = new mongoose.Schema({
   assignedDepartment: {
     type: String,
     enum: [
-      'Public Works Department',
-      'Water Supply Board', 
-      'Electricity Department',
-      'Sanitation Department',
-      'Municipal Corporation',
-      'Transport Department',
-      'Health Department',
-      'Revenue Department',
+      // Display names (legacy)
+      'Public Works Department', 'Water Supply Board', 'Electricity Department',
+      'Sanitation Department', 'Municipal Corporation', 'Transport Department',
+      'Health Department', 'Revenue Department',
+      // Backend keys (used by current admin portal)
+      'sanitation', 'roads', 'water', 'electricity', 'health', 'environment', 'general',
       null
     ],
     default: null

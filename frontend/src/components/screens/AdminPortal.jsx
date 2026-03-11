@@ -131,7 +131,7 @@ export default function AdminPortal({ user, onLogout }) {
 
   // Add official modal
   const [showAddOfficialModal, setShowAddOfficialModal] = useState(false);
-  const [addOfficialForm, setAddOfficialForm] = useState({ name: '', email: '', phone: '', department: '' });
+  const [addOfficialForm, setAddOfficialForm] = useState({ name: '', email: '', phone: '', department: '', password: 'Official@123' });
 
   const buildActivityFeed = useCallback((latestComplaints) => {
     // Demo notifications from localStorage (status updates by officials)
@@ -844,9 +844,10 @@ export default function AdminPortal({ user, onLogout }) {
     }
     try {
       await adminAPI.createOfficial(addOfficialForm);
-      toast.success('Official added successfully');
+      const pwd = addOfficialForm.password || 'Official@123';
+      toast.success(`Official added! Login: ${addOfficialForm.email || addOfficialForm.phone} | Password: ${pwd}`, { duration: 6000 });
       setShowAddOfficialModal(false);
-      setAddOfficialForm({ name: '', email: '', phone: '', department: '' });
+      setAddOfficialForm({ name: '', email: '', phone: '', department: '', password: 'Official@123' });
       fetchData();
     } catch (err) {
       toast.error(err.error || err.message || 'Failed to add official');
@@ -938,9 +939,15 @@ export default function AdminPortal({ user, onLogout }) {
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal" placeholder="official@gov.in" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone <span className="text-gray-400 font-normal">(10-digit Indian number)</span></label>
                     <input type="tel" value={addOfficialForm.phone} onChange={e => setAddOfficialForm(f => ({ ...f, phone: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal" placeholder="+91 9XXXXXXXXX" />
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal" placeholder="9XXXXXXXXX" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Login Password *</label>
+                    <input type="text" value={addOfficialForm.password} onChange={e => setAddOfficialForm(f => ({ ...f, password: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal font-mono" placeholder="Official@123" />
+                    <p className="text-xs text-gray-400 mt-1">Official will use this password to login</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Department *</label>

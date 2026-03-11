@@ -104,11 +104,18 @@ export const deactivateUser = asyncHandler(async (req, res) => {
 // @route   POST /api/users/officials
 // @access  Private/Admin
 export const createOfficial = asyncHandler(async (req, res) => {
-  const { name, email, phone, department, password } = req.body;
+  const { name, email, department, password } = req.body;
+  let { phone } = req.body;
 
   if (!name || !department) {
     res.status(400);
     throw new Error('Name and department are required');
+  }
+
+  // Sanitize phone: strip all non-digits, keep only if exactly 10 digits starting with 6-9
+  if (phone) {
+    const digits = String(phone).replace(/\D/g, '');
+    phone = /^[6-9]\d{9}$/.test(digits) ? digits : undefined;
   }
 
   // Check if email/phone already exists
@@ -132,7 +139,7 @@ export const createOfficial = asyncHandler(async (req, res) => {
     email: email || undefined,
     phone: phone || undefined,
     department,
-    password: password || 'official123',
+    password: password || 'Official@123',
     role: 'official',
     isActive: true,
   });

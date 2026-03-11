@@ -9,9 +9,19 @@ export default function NotificationsScreen() {
 
   useEffect(() => {
     fetchNotifications();
-    // Poll every 15 s so official updates appear automatically
-    const interval = setInterval(() => fetchNotifications(), 15000);
-    return () => clearInterval(interval);
+    // Poll every 8 s so official updates appear faster
+    const interval = setInterval(() => fetchNotifications(), 8000);
+    // Also re-fetch when tab becomes visible again (user switches back from official portal)
+    const onVisible = () => { if (document.visibilityState === 'visible') fetchNotifications(); };
+    document.addEventListener('visibilitychange', onVisible);
+    // Re-fetch on localStorage change (official wrote a demo notification in another tab)
+    const onStorage = (e) => { if (e.key === 'praja_demo_notifications') fetchNotifications(); };
+    window.addEventListener('storage', onStorage);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('storage', onStorage);
+    };
   }, []);
 
   const filteredNotifications = tab === 'unread'

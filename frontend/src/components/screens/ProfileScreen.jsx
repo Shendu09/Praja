@@ -5,8 +5,8 @@ import toast from 'react-hot-toast';
 
 const menuItems = [
   { icon: FileText, label: 'My Complaints', screen: 'complaints' },
-  { icon: Settings, label: 'Settings', screen: null },
-  { icon: HelpCircle, label: 'Help & Support', screen: null },
+  { icon: Settings, label: 'Settings', screen: 'settings' },
+  { icon: HelpCircle, label: 'Help & Support', screen: 'help' },
   { icon: Info, label: 'About App', screen: null },
 ];
 

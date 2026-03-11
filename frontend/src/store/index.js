@@ -2,6 +2,16 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { authAPI, complaintsAPI, usersAPI } from '../services/api';
 
+// ─── Demo / offline notification helpers (localStorage) ──────────────────────
+const DEMO_NOTIF_KEY = 'praja_demo_notifications';
+function loadDemoNotifs() {
+  try { return JSON.parse(localStorage.getItem(DEMO_NOTIF_KEY) || '[]'); } catch { return []; }
+}
+function saveDemoNotifs(list) {
+  try { localStorage.setItem(DEMO_NOTIF_KEY, JSON.stringify(list.slice(0, 100))); } catch {}
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 // Auth Store
 export const useAuthStore = create(
   persist(
@@ -268,6 +278,25 @@ export const useComplaintsStore = create(
             : c
         ),
       }));
+
+      // Push a local notification so the citizen-side screen shows the update
+      const statusLabels = {
+        pending: 'Pending', acknowledged: 'Acknowledged', in_progress: 'In Progress',
+        under_inspection: 'Under Inspection', work_scheduled: 'Work Scheduled',
+        resolved: 'Resolved', rejected: 'Rejected', closed: 'Closed',
+      };
+      const statusLabel = statusLabels[data.status] || data.status;
+      const allComplaints = [...get().complaints, ...get().myComplaints];
+      const complaint = allComplaints.find(c => String(c._id) === idStr);
+      useNotificationsStore.getState().addDemoNotification({
+        _id: 'demo_notif_' + Date.now(),
+        type: data.status === 'resolved' ? 'complaint_resolved' : 'complaint_update',
+        title: data.status === 'resolved' ? '✅ Complaint Resolved!' : `📋 Status Updated: ${statusLabel}`,
+        message: `Your complaint${complaint?.complaintId ? ' ' + complaint.complaintId : ''} has been updated to "${statusLabel}".${data.comment ? ` Official note: ${data.comment}` : ''}`,
+        isRead: false,
+        createdAt: new Date().toISOString(),
+      });
+
       return { success: true, data: { status: data.status } };
     }
   },
@@ -298,18 +327,42 @@ export const useNotificationsStore = create((set, get) => ({
     set({ isLoading: true });
     try {
       const response = await usersAPI.getNotifications({ limit: 50 });
-      const all = response.data || [];
+      const apiList = response.data || [];
+      // Merge any locally-stored demo notifications (cross-tab / offline)
+      const demoList = loadDemoNotifs();
+      const apiIds = new Set(apiList.map(n => n._id));
+      const merged = [...apiList, ...demoList.filter(n => !apiIds.has(n._id))];
+      merged.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
       set({
-        notifications: all,
-        unreadCount: response.unreadCount ?? all.filter(n => !n.isRead).length,
+        notifications: merged,
+        unreadCount: response.unreadCount != null
+          ? response.unreadCount + demoList.filter(n => !n.isRead).length
+          : merged.filter(n => !n.isRead).length,
         isLoading: false,
       });
     } catch (error) {
-      set({ isLoading: false });
+      // API failed (demo / token expired) — show local demo notifications
+      const demoList = loadDemoNotifs();
+      set({
+        notifications: demoList,
+        unreadCount: demoList.filter(n => !n.isRead).length,
+        isLoading: false,
+      });
     }
   },
 
   markAsRead: async (id) => {
+    // Demo notifications don't exist in DB – just update local + localStorage
+    if (String(id).startsWith('demo_')) {
+      saveDemoNotifs(loadDemoNotifs().map(n => n._id === id ? { ...n, isRead: true } : n));
+      set((state) => ({
+        notifications: state.notifications.map((n) =>
+          n._id === id ? { ...n, isRead: true } : n
+        ),
+        unreadCount: Math.max(0, state.unreadCount - 1),
+      }));
+      return;
+    }
     try {
       await usersAPI.markNotificationRead(id);
       set((state) => ({
@@ -323,16 +376,28 @@ export const useNotificationsStore = create((set, get) => ({
     }
   },
 
+  // Inject a notification created locally (demo / offline mode)
+  addDemoNotification: (notification) => {
+    const existing = loadDemoNotifs();
+    saveDemoNotifs([notification, ...existing]);
+    set((state) => ({
+      notifications: [notification, ...state.notifications],
+      unreadCount: state.unreadCount + 1,
+    }));
+  },
+
   markAllAsRead: async () => {
+    // Always mark localStorage demo notifications as read
+    saveDemoNotifs(loadDemoNotifs().map(n => ({ ...n, isRead: true })));
     try {
       await usersAPI.markAllRead();
-      set((state) => ({
-        notifications: state.notifications.map((n) => ({ ...n, isRead: true })),
-        unreadCount: 0,
-      }));
     } catch (error) {
-      console.error('Failed to mark all notifications as read:', error);
+      // Ignore — demo mode
     }
+    set((state) => ({
+      notifications: state.notifications.map((n) => ({ ...n, isRead: true })),
+      unreadCount: 0,
+    }));
   },
 }));
 

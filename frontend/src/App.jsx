@@ -20,6 +20,8 @@ import ComplaintFormScreen from './components/screens/ComplaintFormScreen';
 import NotificationsScreen from './components/screens/NotificationsScreen';
 import ComplaintsScreen from './components/screens/ComplaintsScreen';
 import ProfileScreen from './components/screens/ProfileScreen';
+import SettingsScreen from './components/screens/SettingsScreen';
+import HelpSupportScreen from './components/screens/HelpSupportScreen';
 import RateServiceScreen, { PublicRatingPage } from './components/screens/RateServiceScreen';
 import CommunityScreen from './components/screens/CommunityScreen';
 import QuizScreen from './components/screens/QuizScreen';
@@ -132,6 +134,10 @@ function MainApp() {
           return <ComplaintsScreen />;
         case 'profile':
           return <ProfileScreen />;
+        case 'settings':
+          return <SettingsScreen onBack={() => useUIStore.getState().setScreen('profile')} />;
+        case 'help':
+          return <HelpSupportScreen onBack={() => useUIStore.getState().setScreen('profile')} />;
         case 'rateToilet':
           return <RateServiceScreen onBack={() => useUIStore.getState().setScreen('home')} />;
         case 'community':

@@ -80,15 +80,20 @@ export const useAuthStore = create(
 );
 
 // Complaints Store
-export const useComplaintsStore = create((set, get) => ({
+export const useComplaintsStore = create(
+  persist(
+    (set, get) => ({
   complaints: [],
   myComplaints: [],
+  storedUserId: null,   // tracks whose complaints are cached
   currentComplaint: null,
   categories: [],
   stats: null,
   isLoading: false,
   error: null,
   pagination: { page: 1, limit: 10, total: 0, pages: 0 },
+
+  clearMyComplaints: () => set({ myComplaints: [], storedUserId: null }),
 
   fetchCategories: async () => {
     try {
@@ -113,17 +118,42 @@ export const useComplaintsStore = create((set, get) => ({
     }
   },
 
-  fetchMyComplaints: async (params = {}) => {
+  fetchMyComplaints: async (params = {}, currentUserId = null) => {
     set({ isLoading: true });
     try {
       const response = await complaintsAPI.getMy(params);
-      set({
-        myComplaints: response.data,
-        pagination: response.pagination,
-        isLoading: false,
+      const dbComplaints = response.data || [];
+      set((state) => {
+        const prevUserId = state.storedUserId;
+        const resolvedUserId = currentUserId
+          ? String(currentUserId)
+          : (dbComplaints[0]
+              ? String(dbComplaints[0].user?._id || dbComplaints[0].user || prevUserId || '')
+              : prevUserId);
+
+        // Only keep locally-created demo complaints for the SAME user.
+        // If a different user logs in, start with a clean slate.
+        const isSameUser = !prevUserId || !currentUserId || prevUserId === String(currentUserId);
+        const demoComplaints = isSameUser
+          ? (state.myComplaints || []).filter(
+              c => String(c._id).startsWith('demo_')
+            )
+          : [];
+
+        // Merge: DB is authoritative for status/timeline; demo complaints are appended
+        const dbIds = new Set(dbComplaints.map(c => String(c._id)));
+        const filteredDemo = demoComplaints.filter(c => !dbIds.has(String(c._id)));
+
+        return {
+          myComplaints: [...dbComplaints, ...filteredDemo],
+          storedUserId: resolvedUserId || prevUserId,
+          pagination: response.pagination,
+          isLoading: false,
+        };
       });
-    } catch (error) {
-      set({ isLoading: false, error: error.error });
+    } catch {
+      // API unavailable — keep whatever is already in the store (never wipe)
+      set({ isLoading: false });
     }
   },
 
@@ -204,6 +234,44 @@ export const useComplaintsStore = create((set, get) => ({
     }
   },
 
+  updateComplaintStatus: async (id, data) => {
+    const idStr = String(id);
+    try {
+      const response = await complaintsAPI.updateStatus(id, data);
+      const updated = response.data;
+      set((state) => ({
+        complaints: state.complaints.map(c =>
+          String(c._id) === idStr ? { ...c, ...updated } : c
+        ),
+        myComplaints: state.myComplaints.map(c =>
+          String(c._id) === idStr ? { ...c, ...updated } : c
+        ),
+      }));
+      return { success: true, data: updated };
+    } catch (error) {
+      // Demo mode fallback — update store locally so citizen view stays in sync
+      const timelineEntry = {
+        status: data.status,
+        comment: data.comment || `Status updated to ${data.status}`,
+        updatedBy: 'Official',
+        updatedAt: new Date().toISOString(),
+      };
+      set((state) => ({
+        complaints: state.complaints.map(c =>
+          String(c._id) === idStr
+            ? { ...c, status: data.status, timeline: [...(c.timeline || []), timelineEntry] }
+            : c
+        ),
+        myComplaints: state.myComplaints.map(c =>
+          String(c._id) === idStr
+            ? { ...c, status: data.status, timeline: [...(c.timeline || []), timelineEntry] }
+            : c
+        ),
+      }));
+      return { success: true, data: { status: data.status } };
+    }
+  },
+
   fetchStats: async () => {
     try {
       const response = await complaintsAPI.getStats();
@@ -212,7 +280,12 @@ export const useComplaintsStore = create((set, get) => ({
       console.error('Failed to fetch stats:', error);
     }
   },
-}));
+}),
+  {
+    name: 'complaints-storage',
+    partialize: (state) => ({ myComplaints: state.myComplaints, storedUserId: state.storedUserId }),
+  }
+));
 
 // Notifications Store
 export const useNotificationsStore = create((set, get) => ({

@@ -29,7 +29,7 @@ import BottomNav from './components/BottomNav';
 function MainApp() {
   const { checkAuth, isAuthenticated, user, setUser, logout } = useAuthStore();
   const { currentScreen, showAuthModal, setShowAuthModal, switchRoleRequested, clearSwitchRoleRequest } = useUIStore();
-  const { fetchCategories } = useComplaintsStore();
+  const { fetchCategories, fetchMyComplaints } = useComplaintsStore();
 
   // App flow states
   const [showSplash, setShowSplash] = useState(true);
@@ -62,13 +62,16 @@ function MainApp() {
   useEffect(() => {
     fetchCategories();
     
-    // Check if user is already logged in
-    const token = localStorage.getItem('praja_token');
+    // Check if user is already logged in (token can be stored under either key)
+    const token = localStorage.getItem('token') || localStorage.getItem('praja_token');
     if (token) {
-      checkAuth().then(() => {
-        // If authenticated, skip to portal
+      checkAuth().then((userData) => {
+        // If authenticated, skip to portal and load their complaints
         setShowSplash(false);
         setAppScreen('portal');
+        if (userData?.role === 'citizen' || !userData?.role) {
+          fetchMyComplaints({}, userData?._id);
+        }
       }).catch(() => {
         // Token invalid, show splash
       });
@@ -79,8 +82,8 @@ function MainApp() {
   const handleSplashComplete = () => {
     setShowSplash(false);
     
-    // Check if already authenticated
-    const token = localStorage.getItem('praja_token');
+    // Check if already authenticated (token can be stored under either key)
+    const token = localStorage.getItem('token') || localStorage.getItem('praja_token');
     if (token && isAuthenticated) {
       setAppScreen('portal');
     } else {
@@ -98,10 +101,15 @@ function MainApp() {
   const handleAuthSuccess = (userData) => {
     setUser(userData);
     setSelectedRole(userData.role);
+    if (userData.role === 'citizen' || !userData.role) {
+      // Pass userId so the store can detect a user switch and clear stale data
+      fetchMyComplaints({}, userData._id);
+    }
     setAppScreen('portal');
   };
 
-  // Handle logout
+  // Handle logout — do NOT clear complaints here; they must survive so the
+  // citizen sees their data instantly on next login before the API responds.
   const handleLogout = () => {
     logout();
     setSelectedRole(null);

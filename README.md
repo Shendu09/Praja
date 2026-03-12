@@ -6,7 +6,6 @@ A modern AI-powered civic grievance management platform designed to help citizen
 
 
 ## AI-Powered Analysis
-- **Google Gemini Vision Integration**: Automatically analyzes uploaded images of civic issues.
 - **Smart Categorization**: Detects issue type, severity, and recommends the responsible department.
 - **Confidence Scoring**: Shows reliability of AI analysis.
 - **Auto-fill Forms**: AI suggests complaint descriptions from uploaded photos.
@@ -53,7 +52,7 @@ A modern AI-powered civic grievance management platform designed to help citizen
 - **Framer Motion** for animations
 - **React Hot Toast** for notifications
 - **Lucide React** for icons
-- **Google Gemini Vision API** for AI analysis
+- 
 
 ### Database
 - **Mongo DB**

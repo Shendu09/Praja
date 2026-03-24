@@ -5,312 +5,233 @@
 ### Development Environment
 - **Node.js**: v18.0.0 or higher
 - **npm**: v9.0.0 or higher
-- **MongoDB**: v6.0 or higher (local) OR MongoDB Atlas (cloud)
+- **MongoDB**: v6.0+ (local) or MongoDB Atlas
 - **OS**: Windows 10+, macOS 10.15+, or Linux
 
-### External APIs Required
-- **Google Gemini Vision API** (Free tier - 1500 requests/day)
-  - Get API key at: https://aistudio.google.com/app/apikey
-  - Model: `gemini-1.5-flash`
+### Optional AI Requirements
 
-### Recommended IDE
-- Visual Studio Code with extensions:
-  - Tailwind CSS IntelliSense
-  - ES7+ React/Redux/React-Native snippets
-  - Prettier - Code formatter
-  - ESLint
+#### Gemini API (Frontend assistant features)
+- **API Key**: Required for Gemini-powered UI features
+- **Model**: `gemini-1.5-flash`
+- **Env Var**: `VITE_GEMINI_API_KEY`
 
----
-
-## Backend Dependencies
-
-### Production Dependencies
-| Package | Version | Description |
-|---------|---------|-------------|
-| express | ^4.18.2 | Web framework for Node.js |
-| mongoose | ^8.0.0 | MongoDB object modeling |
-| cors | ^2.8.5 | Cross-Origin Resource Sharing |
-| dotenv | ^16.3.1 | Environment variables |
-| bcryptjs | ^2.4.3 | Password hashing |
-| jsonwebtoken | ^9.0.2 | JWT authentication |
-| multer | ^1.4.5-lts.1 | File upload handling |
-| express-validator | ^7.0.1 | Input validation |
-| helmet | ^7.1.0 | Security headers |
-| morgan | ^1.10.0 | HTTP request logger |
-| express-rate-limit | ^7.1.5 | Rate limiting |
-| nodemailer | ^6.9.0 | Email sending for OTP |
+#### Local Python Analyzer (`analyze_service`)
+- **Python**: 3.10+
+- **Runs locally** on `http://localhost:8000`
+- **First run downloads CLIP model** (~600MB)
 
 ---
 
-## Frontend Dependencies
+## Dependencies
 
-### Production Dependencies
-| Package | Version | Description |
-|---------|---------|-------------|
-| react | ^18.2.0 | UI library |
-| react-dom | ^18.2.0 | React DOM renderer |
-| react-router-dom | ^6.20.0 | Client-side routing |
-| axios | ^1.6.2 | HTTP client |
-| zustand | ^4.4.7 | State management |
-| react-hot-toast | ^2.4.1 | Toast notifications |
-| lucide-react | ^0.294.0 | Icon library |
-| framer-motion | ^10.16.16 | Animations |
-| html5-qrcode | ^2.3.8 | QR code scanner |
+### Backend (`backend/package.json`)
+| Package | Version |
+|---------|---------|
+| bcryptjs | ^2.4.3 |
+| cors | ^2.8.5 |
+| dotenv | ^16.3.1 |
+| express | ^4.18.2 |
+| express-rate-limit | ^7.1.5 |
+| express-validator | ^7.0.1 |
+| helmet | ^7.1.0 |
+| jsonwebtoken | ^9.0.2 |
+| mongoose | ^8.0.0 |
+| morgan | ^1.10.0 |
+| multer | ^1.4.5-lts.1 |
+| nodemailer | ^8.0.2 |
 
-### Dev Dependencies
-| Package | Version | Description |
-|---------|---------|-------------|
-| vite | ^5.0.8 | Build tool |
-| @vitejs/plugin-react | ^4.2.1 | React plugin for Vite |
-| tailwindcss | ^3.3.6 | Utility-first CSS framework |
-| postcss | ^8.4.32 | CSS transformations |
-| autoprefixer | ^10.4.16 | CSS vendor prefixes |
+### Frontend (`frontend/package.json`)
+| Package | Version |
+|---------|---------|
+| axios | ^1.6.2 |
+| framer-motion | ^10.16.16 |
+| html5-qrcode | ^2.3.8 |
+| leaflet | ^1.9.4 |
+| lucide-react | ^0.294.0 |
+| qrcode.react | ^4.2.0 |
+| react | ^18.2.0 |
+| react-dom | ^18.2.0 |
+| react-hot-toast | ^2.4.1 |
+| react-is | ^19.2.4 |
+| react-leaflet | ^4.2.1 |
+| react-router-dom | ^6.20.0 |
+| recharts | ^3.8.0 |
+| zustand | ^4.4.7 |
+
+### Python Analyzer (`analyze_service/requirements.txt`)
+| Package | Version |
+|---------|---------|
+| fastapi | 0.110.0 |
+| uvicorn[standard] | 0.27.1 |
+| python-multipart | 0.0.9 |
+| Pillow | 10.2.0 |
+| transformers | 4.38.0 |
+| torch | Installed separately in `start.bat` |
 
 ---
 
 ## Environment Variables
 
-### Backend (.env)
+### Backend (`backend/.env`)
 ```env
 PORT=5001
 MONGODB_URI=mongodb://localhost:27017/praja
 JWT_SECRET=your_super_secret_jwt_key_here
 JWT_EXPIRE=30d
 NODE_ENV=development
+FRONTEND_URL=http://localhost:5173
 ```
 
-### Frontend (.env)
+### Frontend (`frontend/.env`)
 ```env
 VITE_API_URL=/api
-VITE_GEMINI_API_KEY=AIzaSy...your_gemini_api_key
+VITE_GEMINI_API_KEY=your_gemini_api_key
+VITE_ANALYZE_URL=http://localhost:8000
+VITE_NGROK_URL=https://your-ngrok-url.ngrok-free.app
 ```
 
 ---
 
-## Installation Commands
+## Installation & Run Commands
 
 ```bash
-# Clone repository
-git clone https://github.com/Shendu09/Praja.git
-cd Praja
-
-# Install all dependencies (root, backend, frontend)
+# root
 npm install
+npm run install:all
 
-# Start MongoDB (Windows example)
-mongod --dbpath "C:\data\db"
-
-# Start development servers
+# run backend + frontend together
 npm run dev
-
-# Or start individually:
-cd backend && node server.js    # Backend on port 5001
-cd frontend && npm run dev      # Frontend on port 5173
 ```
 
----
+### Individual Services
+```bash
+# backend
+cd backend
+npm run dev
 
-## Database Requirements
+# frontend
+cd frontend
+npm run dev
 
-### MongoDB Collections
-1. **users** - User accounts and profiles
-   - Roles: citizen, official, admin
-   - OTP verification support
-   - Points/XP tracking
+# python analyzer (optional)
+cd analyze_service
+start.bat
+```
 
-2. **complaints** - Complaint records
-   - AI verification data
-   - Geospatial location
-   - Status timeline
-   - ATR (Action Taken Report) history
-
-3. **notifications** - User notifications
-
-### Indexes Required
-- `users.email` (unique)
-- `users.phone` (unique)
-- `complaints.complaintId` (unique)
-- `complaints.location` (2dsphere - geospatial)
-- `complaints.user` + `complaints.createdAt`
-- `complaints.status` + `complaints.createdAt`
-- `notifications.user` + `notifications.createdAt`
+Default ports:
+- Frontend: `http://localhost:5173`
+- Backend: `http://localhost:5001`
+- AI Analyzer: `http://localhost:8000`
 
 ---
 
 ## API Endpoints
 
-### Authentication
+### Health
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/auth/register` | User registration |
-| POST | `/api/auth/login` | User login |
-| GET | `/api/auth/me` | Get current user |
-| POST | `/api/otp/send` | Send OTP |
-| POST | `/api/otp/verify` | Verify OTP |
-| POST | `/api/auth/otp-login` | Login via OTP |
+| GET | `/api/health` | API health check |
+
+### Auth
+| Method | Endpoint |
+|--------|----------|
+| POST | `/api/auth/register` |
+| POST | `/api/auth/login` |
+| POST | `/api/auth/otp-login` |
+| GET | `/api/auth/me` |
+| PUT | `/api/auth/profile` |
+| PUT | `/api/auth/password` |
+| POST | `/api/auth/logout` |
+
+### OTP
+| Method | Endpoint |
+|--------|----------|
+| POST | `/api/otp/send` |
+| POST | `/api/otp/verify` |
 
 ### Complaints
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/complaints` | List all complaints |
-| GET | `/api/complaints/my` | Get user's complaints |
-| GET | `/api/complaints/nearby` | Get nearby complaints |
-| GET | `/api/complaints/stats` | Get statistics |
-| POST | `/api/complaints` | Create complaint (with AI) |
-| GET | `/api/complaints/:id` | Get complaint details |
-| PATCH | `/api/complaints/:id/status` | Update status |
-| POST | `/api/complaints/:id/upvote` | Upvote complaint |
+| Method | Endpoint |
+|--------|----------|
+| GET | `/api/complaints` |
+| GET | `/api/complaints/categories` |
+| GET | `/api/complaints/stats` |
+| GET | `/api/complaints/nearby` |
+| POST | `/api/complaints/check-duplicate` |
+| POST | `/api/complaints` |
+| GET | `/api/complaints/my` |
+| GET | `/api/complaints/:id` |
+| POST | `/api/complaints/:id/upvote` |
+| POST | `/api/complaints/:id/feedback` |
+| POST | `/api/complaints/:id/escalate` |
+| PUT | `/api/complaints/:id/status` |
+| PATCH | `/api/complaints/:id/status` |
+| PATCH | `/api/complaints/:id/escalation-resolution` |
 
 ### Users
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/users/notifications` | Get notifications |
-| PUT | `/api/users/notifications/:id/read` | Mark as read |
-| PUT | `/api/users/notifications/read-all` | Mark all as read |
-| GET | `/api/users/leaderboard` | Get leaderboard |
-| GET | `/api/users/stats` | Get user stats |
+| Method | Endpoint |
+|--------|----------|
+| GET | `/api/users/leaderboard` |
+| GET | `/api/users/stats` |
+| GET | `/api/users/notifications` |
+| PUT | `/api/users/notifications/read-all` |
+| PUT | `/api/users/notifications/:id/read` |
+| GET | `/api/users` *(admin)* |
+| POST | `/api/users/officials` *(admin)* |
+| GET | `/api/users/:id` *(admin)* |
+| PUT | `/api/users/:id/role` *(admin)* |
+| PUT | `/api/users/:id/deactivate` *(admin)* |
 
----
+### Admin Assignment
+| Method | Endpoint |
+|--------|----------|
+| POST | `/api/admin/complaints/:id/assign` |
+| POST | `/api/admin/complaints/bulk-assign` |
+| GET | `/api/admin/officials` |
+| GET | `/api/admin/assignment-stats` |
 
-## AI Integration Requirements
+### Admin Analytics
+| Method | Endpoint |
+|--------|----------|
+| GET | `/api/admin/analytics` |
+| GET | `/api/admin/analytics/departments` |
+| GET | `/api/admin/analytics/locations` |
+| GET | `/api/admin/analytics/export` |
 
-### Google Gemini Vision API
-- **Model**: `gemini-1.5-flash`
-- **Endpoint**: `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent`
-- **Free Tier**: 1500 requests/day (no credit card required)
-- **Get API Key**: https://aistudio.google.com/app/apikey
-
-### AI Analysis Response Structure
-```json
-{
-  "isCivicIssue": true,
-  "category": "Road & Infrastructure",
-  "severity": "High",
-  "title": "Pothole on main road",
-  "description": "Large pothole visible on road surface",
-  "department": "PWD",
-  "suggestedAction": "Immediate repair needed",
-  "confidence": 89,
-  "tags": ["road", "pothole", "damage"]
-}
-```
-
----
-
-## User Roles & Permissions
-
-### Citizen
-- Register/Login with OTP
-- Submit complaints with photos
-- Track complaint status
-- View community complaints
-- Upvote issues
-- Earn XP points
-- Take civic quizzes
-- Rate public services
-
-### Government Official
-- View assigned complaints
-- Update complaint status
-- Submit ATR (Action Taken Report)
-- View complaint map locations
-- Filter by priority/status
-
-### Administrator
-- Full system access
-- View all complaints
-- User management
-- Analytics dashboard
-- System configuration
-
----
-
-## Browser Support
-
-- Chrome 90+
-- Firefox 88+
-- Safari 14+
-- Edge 90+
-- Mobile browsers (responsive design)
-
----
-
-## File Upload Requirements
-
-- **Supported formats**: JPEG, JPG, PNG, WebP
-- **Max file size**: 5MB per image (10MB for AI analysis)
-- **Max files per request**: 5
-- **Base64 encoding**: Required for AI analysis
+### Services / QR Ratings
+| Method | Endpoint |
+|--------|----------|
+| GET | `/api/services` |
+| GET | `/api/services/analytics/summary` |
+| GET | `/api/services/:serviceId` |
+| POST | `/api/services/:serviceId/rate` |
+| POST | `/api/services` *(admin)* |
 
 ---
 
 ## Security Requirements
 
-- JWT token-based authentication
+- JWT-based authentication
 - Password hashing with bcryptjs
-- Rate limiting (100 requests/15 min)
-- CORS configuration
+- Rate limiting (100 requests / 15 minutes)
 - Helmet security headers
-- Input validation
-- XSS protection
+- Input validation with express-validator
+- CORS support for localhost/ngrok/vercel/render and configured frontend URL
 
 ---
 
-## Complaint Categories
+## File Upload Requirements
 
-1. 🗑️ Cleanliness Target Unit (Dirty Spot)
-2. 🏔️ Garbage Dump
-3. 🚛 Garbage Vehicle Not Arrived
-4. 🔥 Burning of Garbage in Open Space
-5. 🧹 Sweeping Not Done
-6. 🗑️ Dustbins Not Cleaned
-7. 🚽 Open Defecation
-8. 💧 Overflow of Sewerage or Storm Water
-9. 🌊 Stagnant Water on Road
-10. 🏚️ Slum Area Not Clean
-11. 🌿 Overgrown Vegetation on Road
-12. 🐄 Stray Animals
-13. 📋 Other
+- Supported: JPEG, JPG, PNG, WebP
+- Backend JSON/body limit: `10mb`
+- Complaint upload route uses single image field: `photo`
 
 ---
 
-## Complaint Status Flow
+## Related Docs
 
-```
-PENDING → ACKNOWLEDGED → IN_PROGRESS → UNDER_INSPECTION → WORK_SCHEDULED → RESOLVED
-                                                                      ↓
-                                                                  REJECTED
-```
+- `README.md` - quick project setup
+- `QR_SETUP_GUIDE.md` - ngrok + QR demo flow
 
 ---
 
-## Testing
-
-### Test Image Types
-| Image | Expected Result |
-|-------|-----------------|
-| Pothole photo | Road & Infrastructure, High/Critical |
-| Garbage dump | Waste Management, High |
-| Broken streetlight | Electricity, Medium |
-| Flooded road | Road & Infrastructure, Critical |
-| Random selfie | isCivicIssue: false |
-| Blank/dark image | isCivicIssue: false |
-
----
-
-## Performance Requirements
-
-- API response time: < 500ms
-- AI analysis time: < 3 seconds
-- Page load time: < 2 seconds
-- Mobile-responsive design
-- Offline demo mode support
-
----
-
-Made with ❤️ for Smart India Hackathon 🇮🇳
-- Password hashing (bcrypt with 12 rounds)
-- Rate limiting (100 requests per 15 minutes)
-- CORS whitelist configuration
-- Helmet security headers
-- Input validation and sanitization
+Made with ❤️ for civic problem solving 🇮🇳

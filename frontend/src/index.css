@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&family=Inter:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -11,9 +11,46 @@
 }
 
 body {
-  font-family: 'Nunito', 'Segoe UI', sans-serif;
-  background-color: #e0e0e0;
+  font-family: 'Inter', 'Rajdhani', 'Segoe UI', sans-serif;
+  background-color: #0F1F3D;
+  color: #FFFFFF;
   min-height: 100vh;
+}
+
+input,
+textarea,
+select {
+  color: #1f2937;
+  caret-color: #1f2937;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #9ca3af;
+}
+
+h1, h2, h3, h4, h5 {
+  font-family: 'Rajdhani', 'Inter', sans-serif;
+  font-weight: 700;
+}
+
+.chakra-watermark {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 120px;
+  pointer-events: none;
+  background: url('/ashoka-chakra.svg') no-repeat center top;
+  background-size: 80px 80px;
+  opacity: 0.08;
+  z-index: 0;
+}
+
+.tricolor-bar {
+  width: 100vw;
+  height: 5px;
+  background: linear-gradient(90deg, #FF9933 33%, #FFFFFF 33%, #FFFFFF 66%, #138808 66%);
 }
 
 /* Custom scrollbar */

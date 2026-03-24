@@ -47,9 +47,6 @@ export default function ComplaintFormScreen() {
   const [imageRejectionReason, setImageRejectionReason] = useState('');
   const fileRef = useRef();
 
-  // Gemini API key for image validation
-  const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY;
-
   // Check for duplicates when location and AI result are available
   useEffect(() => {
     const checkDuplicates = async () => {
@@ -156,12 +153,11 @@ export default function ComplaintFormScreen() {
       reader.readAsDataURL(file);
       
       // AI image validation — enforce civic/sanitation images only
-      if (geminiApiKey) {
-        toast.loading('Verifying image...', { id: 'ai-analysis' });
-        const result = await analyzeImage(file);
-        toast.dismiss('ai-analysis');
+      toast.loading('Verifying image...', { id: 'ai-analysis' });
+      const result = await analyzeImage(file);
+      toast.dismiss('ai-analysis');
         
-        if (result) {
+      if (result) {
           setAiVisionResult(result);
           
           if (!result.isCivicIssue) {
@@ -188,7 +184,6 @@ export default function ComplaintFormScreen() {
           // AI failed — still allow submission but warn
           toast.error('AI verification failed — you can still submit', { icon: '⚠️' });
         }
-      }
     }
   };
 
@@ -498,7 +493,7 @@ export default function ComplaintFormScreen() {
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Describe the issue..."
                 maxLength={500}
-                className="flex-1 border border-gray-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-teal transition-colors"
+                className="flex-1 border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-800 placeholder:text-gray-400 outline-none focus:border-teal transition-colors"
               />
             </div>
             <div className="text-right text-xs text-gray-400 mt-1">

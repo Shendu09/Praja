@@ -151,6 +151,7 @@ export default function OTPAuthScreen({ role, onBack, onSuccess }) {
             complaintsPosted: 5,
           };
           localStorage.setItem('praja_token', 'demo_token_' + Date.now());
+          localStorage.setItem('praja_demo_user', JSON.stringify(mockUser));
           onSuccess(mockUser);
         } else {
           setStep('details');
@@ -262,7 +263,26 @@ export default function OTPAuthScreen({ role, onBack, onSuccess }) {
         onSuccess(response.data);
       }
     } catch (error) {
-      toast.error(error.error || 'Registration failed');
+      // Demo mode fallback — save user locally when backend is unavailable
+      if (isDemoMode) {
+        const demoToken = 'demo_token_' + Date.now();
+        const demoUser = {
+          _id: 'demo_' + Date.now(),
+          name: formData.name,
+          email: authType === 'email' ? identifier : undefined,
+          phone: authType === 'phone' ? identifier : undefined,
+          role,
+          points: 0,
+          complaintsPosted: 0,
+          location: formData.location,
+        };
+        localStorage.setItem('praja_token', demoToken);
+        localStorage.setItem('praja_demo_user', JSON.stringify(demoUser));
+        toast.success('Registration successful! (Demo Mode)');
+        onSuccess(demoUser);
+      } else {
+        toast.error(error.error || 'Registration failed');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -461,7 +481,7 @@ export default function OTPAuthScreen({ role, onBack, onSuccess }) {
                   value={digit}
                   onChange={e => handleOtpChange(index, e.target.value)}
                   onKeyDown={e => handleOtpKeyDown(index, e)}
-                  className="w-12 h-14 text-center text-2xl font-bold border-2 border-gray-200 rounded-xl focus:border-teal outline-none"
+                  className="w-12 h-14 text-center text-2xl font-bold text-gray-800 border-2 border-gray-200 rounded-xl focus:border-teal outline-none"
                 />
               ))}
             </div>

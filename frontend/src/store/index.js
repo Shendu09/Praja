@@ -69,6 +69,19 @@ export const useAuthStore = create(
           set({ isAuthenticated: false });
           return;
         }
+        // Demo mode — restore user from localStorage without hitting the API
+        if (token.startsWith('demo_token_')) {
+          const saved = localStorage.getItem('praja_demo_user');
+          if (saved) {
+            try {
+              const demoUser = JSON.parse(saved);
+              set({ user: demoUser, isAuthenticated: true, token });
+              return demoUser;
+            } catch {}
+          }
+          set({ isAuthenticated: false });
+          return;
+        }
         try {
           const response = await authAPI.getMe();
           set({ user: response.data, isAuthenticated: true, token });

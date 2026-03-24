@@ -1,6 +1,41 @@
 import axios from 'axios';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api';
+const LOCAL_USERS_KEY = 'praja_local_users';
+
+const isLocalMode = () => {
+  const envFlag = String(import.meta.env.VITE_LOCAL_MODE || '').toLowerCase();
+  if (envFlag === 'true') return true;
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('praja_local_mode') === 'true';
+  }
+  return false;
+};
+
+const readLocalUsers = () => {
+  try {
+    return JSON.parse(localStorage.getItem(LOCAL_USERS_KEY) || '[]');
+  } catch {
+    return [];
+  }
+};
+
+const writeLocalUsers = (users) => {
+  localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(users));
+};
+
+const toPublicUser = (user) => ({
+  _id: user._id,
+  name: user.name,
+  email: user.email,
+  phone: user.phone,
+  role: user.role || 'citizen',
+  points: user.points || 0,
+  complaintsPosted: user.complaintsPosted || 0,
+  location: user.location || null,
+});
+
+const makeLocalToken = () => `demo_token_${Date.now()}`;
 
 // Create axios instance
 const api = axios.create({
@@ -39,12 +74,110 @@ api.interceptors.response.use(
 
 // Auth API
 export const authAPI = {
-  register: (data) => api.post('/auth/register', data),
-  login: (data) => api.post('/auth/login', data),
-  getMe: () => api.get('/auth/me'),
-  updateProfile: (data) => api.put('/auth/profile', data),
-  updatePassword: (data) => api.put('/auth/password', data),
-  logout: () => api.post('/auth/logout'),
+  register: async (data) => {
+    if (!isLocalMode()) return api.post('/auth/register', data);
+
+    const users = readLocalUsers();
+    const duplicate = users.find((u) =>
+      (data.email && u.email === data.email) || (data.phone && u.phone === data.phone)
+    );
+    if (duplicate) {
+      return Promise.reject({ error: 'Account already exists' });
+    }
+
+    const localUser = {
+      _id: `local_${Date.now()}`,
+      name: data.name,
+      email: data.email,
+      phone: data.phone,
+      password: data.password,
+      role: data.role || 'citizen',
+      points: 0,
+      complaintsPosted: 0,
+      location: data.location || null,
+      createdAt: new Date().toISOString(),
+    };
+    users.unshift(localUser);
+    writeLocalUsers(users);
+
+    const token = makeLocalToken();
+    const publicUser = toPublicUser(localUser);
+    localStorage.setItem('praja_token', token);
+    localStorage.setItem('praja_demo_user', JSON.stringify(publicUser));
+    return { success: true, data: { ...publicUser, token } };
+  },
+
+  login: async (data) => {
+    if (!isLocalMode()) return api.post('/auth/login', data);
+
+    const users = readLocalUsers();
+    const user = users.find((u) => {
+      const identifierMatches =
+        (data.email && u.email === data.email) ||
+        (data.phone && u.phone === data.phone) ||
+        (data.identifier && (u.email === data.identifier || u.phone === data.identifier));
+      const roleMatches = !data.role || !u.role || u.role === data.role;
+      return identifierMatches && roleMatches;
+    });
+
+    if (!user || (data.password && user.password !== data.password)) {
+      return Promise.reject({ error: 'Invalid credentials' });
+    }
+
+    const token = makeLocalToken();
+    const publicUser = toPublicUser(user);
+    localStorage.setItem('praja_token', token);
+    localStorage.setItem('praja_demo_user', JSON.stringify(publicUser));
+    return { success: true, data: { ...publicUser, token } };
+  },
+
+  getMe: async () => {
+    if (!isLocalMode()) return api.get('/auth/me');
+    const token = localStorage.getItem('token') || localStorage.getItem('praja_token');
+    if (!token) {
+      return Promise.reject({ error: 'Unauthorized' });
+    }
+    const saved = localStorage.getItem('praja_demo_user');
+    if (!saved) {
+      return Promise.reject({ error: 'User not found' });
+    }
+    return { success: true, data: JSON.parse(saved) };
+  },
+
+  updateProfile: async (data) => {
+    if (!isLocalMode()) return api.put('/auth/profile', data);
+    const saved = localStorage.getItem('praja_demo_user');
+    if (!saved) {
+      return Promise.reject({ error: 'User not found' });
+    }
+
+    const current = JSON.parse(saved);
+    const updated = { ...current, ...data };
+    localStorage.setItem('praja_demo_user', JSON.stringify(updated));
+
+    const users = readLocalUsers();
+    writeLocalUsers(users.map((u) => (u._id === current._id ? { ...u, ...data } : u)));
+    return { success: true, data: updated };
+  },
+
+  updatePassword: async (data) => {
+    if (!isLocalMode()) return api.put('/auth/password', data);
+    const saved = localStorage.getItem('praja_demo_user');
+    if (!saved) {
+      return Promise.reject({ error: 'User not found' });
+    }
+    const current = JSON.parse(saved);
+    const users = readLocalUsers();
+    writeLocalUsers(
+      users.map((u) => (u._id === current._id ? { ...u, password: data.newPassword || data.password } : u))
+    );
+    return { success: true };
+  },
+
+  logout: async () => {
+    if (!isLocalMode()) return api.post('/auth/logout');
+    return { success: true };
+  },
 };
 
 // Complaints API

@@ -35,7 +35,6 @@ Praja/
 ├─ backend/          # Express API
 ├─ frontend/         # React app
 ├─ analyze_service/  # Optional Python image analysis service
-├─ QR_SETUP_GUIDE.md
 └─ REQUIREMENTS.md
 ```
 
@@ -81,6 +80,30 @@ npm run dev
 - Frontend: `http://localhost:5173`
 - Backend API: `http://localhost:5001/api`
 
+## QR Rating on Any Device (ngrok)
+
+Use this when scanning QR from a phone that is not on your localhost/WiFi network.
+
+1) Start frontend/backed stack normally.
+
+2) In another terminal, start ngrok for frontend:
+
+```bash
+ngrok http 5173
+```
+
+3) Copy the generated HTTPS URL and set it as frontend env:
+
+```env
+VITE_NGROK_URL=https://your-id.ngrok-free.app
+```
+
+For Docker Compose, you can export `VITE_NGROK_URL` before running compose so QR links use that public URL.
+
+4) Restart frontend (or recreate frontend container). New QR codes will open:
+
+`https://your-id.ngrok-free.app/rate/<serviceId>`
+
 ## Optional: Start AI Analyzer Service
 
 If you want image analysis through `useImageAnalysis`, run:
@@ -123,7 +146,6 @@ VITE_ANALYZE_URL=http://localhost:8000
 
 ## Useful Docs
 
-- `QR_SETUP_GUIDE.md` - Mobile QR-based service rating setup
 - `REQUIREMENTS.md` - Detailed dependencies, APIs, and role permissions
 
 ## License

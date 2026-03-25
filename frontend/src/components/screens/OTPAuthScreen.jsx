@@ -234,6 +234,10 @@ export default function OTPAuthScreen({ role, onBack, onSuccess }) {
       toast.error('Please enter your name');
       return;
     }
+    if (formData.name.trim().length < 2) {
+      toast.error('Name must be at least 2 characters');
+      return;
+    }
     if (formData.password.length < 6) {
       toast.error('Password must be at least 6 characters');
       return;
@@ -281,7 +285,10 @@ export default function OTPAuthScreen({ role, onBack, onSuccess }) {
         toast.success('Registration successful! (Demo Mode)');
         onSuccess(demoUser);
       } else {
-        toast.error(error.error || 'Registration failed');
+        const validationMessage = Array.isArray(error?.errors) && error.errors.length > 0
+          ? error.errors[0]?.message
+          : null;
+        toast.error(validationMessage || error?.error || error?.message || 'Registration failed');
       }
     } finally {
       setIsLoading(false);

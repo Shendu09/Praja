@@ -8,7 +8,7 @@ import {
   Shield, Sparkles, Trophy, Eye, Copy, Loader2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { buildRatingUrl, getBaseUrl, detectLanIp } from '../../config/ngrok';
+import { buildRatingUrl, getBaseUrl, detectLanIp, hasNgrokConfigured } from '../../config/ngrok';
 
 // Demo service data — shown when no services exist in the DB yet.
 // Each serviceId must be unique; the QR code encodes /rate/<serviceId>.
@@ -254,6 +254,8 @@ export default function RateServiceScreen({ onBack }) {
   const [allServices, setAllServices] = useState({}); // Grouped by category
   const [loadingServices, setLoadingServices] = useState(false);
   const [servicesError, setServicesError] = useState(null);
+  const qrBaseUrl = getBaseUrl();
+  const ngrokConfigured = hasNgrokConfigured();
 
   // Rating form state
   const [rating, setRating] = useState(0);
@@ -544,19 +546,22 @@ export default function RateServiceScreen({ onBack }) {
               </div>
             </div>
 
-            {/* Localhost warning — phones can't reach localhost */}
-            {typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && (
+            {/* QR base URL status and setup guidance */}
+            <div className="mb-4 p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
+              <p className="text-sm font-semibold text-emerald-800 mb-1">🔗 QR links currently use:</p>
+              <p className="text-xs font-mono bg-emerald-100 px-3 py-2 rounded-lg text-emerald-900 select-all break-all">
+                {qrBaseUrl}
+              </p>
+            </div>
+
+            {typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && !ngrokConfigured && (
               <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-xl">
-                <p className="text-sm font-semibold text-amber-800 mb-1">📱 Want to scan QR from another phone?</p>
+                <p className="text-sm font-semibold text-amber-800 mb-1">📱 For any network/device, enable ngrok</p>
                 <p className="text-xs text-amber-700">
-                  Open this page on your PC using your <strong>WiFi IP</strong> instead of localhost:
-                </p>
-                <p className="text-xs font-mono bg-amber-100 px-3 py-2 rounded-lg mt-2 text-amber-900 select-all break-all">
-                  http://{window.__PRAJA_LAN_IP || '<your-wifi-ip>'}:{window.location.port || '5173'}
+                  1) Run <code className="bg-amber-100 px-1 rounded">ngrok http 5173</code>  2) Copy the HTTPS URL  3) Set <code className="bg-amber-100 px-1 rounded">VITE_NGROK_URL</code> and restart frontend.
                 </p>
                 <p className="text-[11px] text-amber-600 mt-2">
-                  To find your IP: open a terminal → run <code className="bg-amber-100 px-1 rounded">ipconfig</code> → look for "IPv4 Address" under your WiFi adapter.
-                  Then QR codes will automatically use that IP and work on any phone on the same WiFi.
+                  Example: <code className="bg-amber-100 px-1 rounded">VITE_NGROK_URL=https://abcd-1234.ngrok-free.app</code>
                 </p>
               </div>
             )}

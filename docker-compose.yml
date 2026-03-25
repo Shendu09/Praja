@@ -42,6 +42,7 @@ services:
     environment:
       VITE_API_URL: http://localhost:5000/api
       VITE_ANALYZE_URL: http://localhost:8000
+      VITE_NGROK_URL: ${VITE_NGROK_URL:-}
     depends_on:
       - backend
       - analyze

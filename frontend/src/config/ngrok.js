@@ -15,8 +15,8 @@
 // on any phone on the same WiFi — no manual IP configuration needed.
 export const getBaseUrl = () => {
   // First priority: ngrok URL from environment
-  if (import.meta.env.VITE_NGROK_URL) {
-    return import.meta.env.VITE_NGROK_URL;
+  if (import.meta.env.VITE_NGROK_URL && String(import.meta.env.VITE_NGROK_URL).trim()) {
+    return String(import.meta.env.VITE_NGROK_URL).trim().replace(/\/$/, '');
   }
 
   if (typeof window !== 'undefined') {
@@ -25,7 +25,7 @@ export const getBaseUrl = () => {
 
     // If already on a LAN IP, ngrok, or deployed domain — use as-is
     if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
-      return origin;
+      return String(origin).replace(/\/$/, '');
     }
 
     // On localhost: QR codes must use the machine's LAN IP so other
@@ -34,7 +34,7 @@ export const getBaseUrl = () => {
     // a runtime WebRTC-based detection saved earlier.
     const lanIp = import.meta.env.VITE_LAN_IP || window.__PRAJA_LAN_IP;
     if (lanIp) {
-      return `http://${lanIp}:${window.location.port || '5173'}`;
+      return `http://${lanIp}:${window.location.port || '5173'}`.replace(/\/$/, '');
     }
 
     // Last resort: try to detect via the RTCPeerConnection trick
@@ -43,10 +43,10 @@ export const getBaseUrl = () => {
 
     // While detection runs asynchronously, return origin (localhost).
     // The user will see a banner suggesting they open via LAN IP.
-    return origin;
+    return String(origin).replace(/\/$/, '');
   }
 
-  return 'http://localhost:5173';
+  return 'http://localhost:5173'.replace(/\/$/, '');
 };
 
 // Async LAN IP detection using WebRTC (works in most browsers)
@@ -82,8 +82,12 @@ export const detectLanIp = () => {
 
 // Build the rating URL for QR codes
 export const buildRatingUrl = (serviceId) => {
-  const baseUrl = getBaseUrl();
+  const baseUrl = String(getBaseUrl()).replace(/\/$/, '');
   return `${baseUrl}/rate/${serviceId}`;
+};
+
+export const hasNgrokConfigured = () => {
+  return Boolean(import.meta.env.VITE_NGROK_URL && String(import.meta.env.VITE_NGROK_URL).trim());
 };
 
 // Check if we're running on ngrok
@@ -107,6 +111,7 @@ export const getDisplayUrl = (serviceId) => {
 export default {
   getBaseUrl,
   buildRatingUrl,
+  hasNgrokConfigured,
   isNgrokEnvironment,
   getDisplayUrl
 };

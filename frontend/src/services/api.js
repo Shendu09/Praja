@@ -40,6 +40,7 @@ const makeLocalToken = () => `demo_token_${Date.now()}`;
 // Create axios instance
 const api = axios.create({
   baseURL: API_URL,
+  timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
   },

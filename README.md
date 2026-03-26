@@ -40,26 +40,50 @@ Praja/
 
 ## Prerequisites
 
-- Node.js 18+
-- npm 9+
-- MongoDB (local or Atlas)
-- Python 3.10+ (only if using `analyze_service`)
+- Docker Desktop (recommended)
+- Docker Compose v2+
+- Node.js 18+ (for local/non-Docker run)
+- npm 9+ (for local/non-Docker run)
+- MongoDB (local or Atlas, for local/non-Docker run)
+- Python 3.10+ (only if using `analyze_service` locally)
 
 ## Quick Start
 
-### 1) Install dependencies
+### 1) Run with Docker (recommended)
+
+From repository root:
+
+```bash
+docker compose up --build -d
+```
+
+- Frontend: `http://localhost:5173`
+- Backend API: `http://localhost:5000/api`
+- AI Analyzer: `http://localhost:8000`
+
+Useful commands:
+
+```bash
+docker compose ps
+docker compose logs -f
+docker compose down
+```
+
+### 2) Local run (without Docker)
+
+#### Install dependencies
 
 ```bash
 npm install
 npm run install:all
 ```
 
-### 2) Configure backend environment
+#### Configure backend environment
 
 Create `backend/.env`:
 
 ```env
-PORT=5001
+PORT=5000
 MONGODB_URI=mongodb://localhost:27017/praja
 JWT_SECRET=your_super_secret
 JWT_EXPIRE=30d
@@ -67,9 +91,7 @@ NODE_ENV=development
 FRONTEND_URL=http://localhost:5173
 ```
 
-> `PORT=5001` is recommended because frontend proxy defaults to backend on port 5001.
-
-### 3) Run frontend + backend
+#### Run frontend + backend
 
 From repository root:
 
@@ -78,13 +100,13 @@ npm run dev
 ```
 
 - Frontend: `http://localhost:5173`
-- Backend API: `http://localhost:5001/api`
+- Backend API: `http://localhost:5000/api`
 
 ## QR Rating on Any Device (ngrok)
 
 Use this when scanning QR from a phone that is not on your localhost/WiFi network.
 
-1) Start frontend/backed stack normally.
+1) Start frontend/backend stack normally.
 
 2) In another terminal, start ngrok for frontend:
 
@@ -127,6 +149,8 @@ Then set frontend environment (optional):
 ```env
 VITE_ANALYZE_URL=http://localhost:8000
 ```
+
+When using Docker, CLIP model files are pre-cached during image build so runtime startup is more reliable.
 
 ## Scripts
 

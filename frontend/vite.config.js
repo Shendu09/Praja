@@ -6,6 +6,7 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',     // expose to all network interfaces
     port: 5173,
+    allowedHosts: ['localhost', '.ngrok-free.dev', '.ngrok-free.app'],
     proxy: {
       '/api': {
         target: process.env.VITE_API_URL

@@ -3,9 +3,11 @@
 ## System Requirements
 
 ### Development Environment
-- **Node.js**: v18.0.0 or higher
-- **npm**: v9.0.0 or higher
-- **MongoDB**: v6.0+ (local) or MongoDB Atlas
+- **Docker Desktop**: Latest stable
+- **Docker Compose**: v2+
+- **Node.js**: v18.0.0 or higher *(only for non-Docker local run)*
+- **npm**: v9.0.0 or higher *(only for non-Docker local run)*
+- **MongoDB**: v6.0+ *(only for non-Docker local run)* or MongoDB Atlas
 - **OS**: Windows 10+, macOS 10.15+, or Linux
 
 ### Optional AI Requirements
@@ -18,7 +20,7 @@
 #### Local Python Analyzer (`analyze_service`)
 - **Python**: 3.10+
 - **Runs locally** on `http://localhost:8000`
-- **First run downloads CLIP model** (~600MB)
+- **Docker build pre-caches CLIP model** (~600MB) so runtime works offline after image build
 
 ---
 
@@ -66,7 +68,7 @@
 | python-multipart | 0.0.9 |
 | Pillow | 10.2.0 |
 | transformers | 4.38.0 |
-| torch | Installed separately in `start.bat` |
+| torch | Installed in Dockerfile (`pip install ... --index-url https://download.pytorch.org/whl/cpu`) |
 
 ---
 
@@ -74,7 +76,7 @@
 
 ### Backend (`backend/.env`)
 ```env
-PORT=5001
+PORT=5000
 MONGODB_URI=mongodb://localhost:27017/praja
 JWT_SECRET=your_super_secret_jwt_key_here
 JWT_EXPIRE=30d
@@ -84,7 +86,7 @@ FRONTEND_URL=http://localhost:5173
 
 ### Frontend (`frontend/.env`)
 ```env
-VITE_API_URL=/api
+VITE_API_URL=http://localhost:5000/api
 VITE_GEMINI_API_KEY=your_gemini_api_key
 VITE_ANALYZE_URL=http://localhost:8000
 VITE_NGROK_URL=https://your-ngrok-url.ngrok-free.app
@@ -94,6 +96,26 @@ VITE_NGROK_URL=https://your-ngrok-url.ngrok-free.app
 
 ## Installation & Run Commands
 
+### Docker (recommended)
+```bash
+# from repo root
+docker compose up --build -d
+
+# check services
+docker compose ps
+
+# logs
+docker compose logs -f
+```
+
+### Stop Docker stack
+```bash
+docker compose down
+```
+
+---
+
+### Local (without Docker)
 ```bash
 # root
 npm install
@@ -120,7 +142,7 @@ start.bat
 
 Default ports:
 - Frontend: `http://localhost:5173`
-- Backend: `http://localhost:5001`
+- Backend: `http://localhost:5000`
 - AI Analyzer: `http://localhost:8000`
 
 ---
@@ -226,7 +248,6 @@ Default ports:
 - Complaint upload route uses single image field: `photo`
 
 ---
-
 ## Related Docs
 
 - `README.md` - quick project setup
@@ -234,4 +255,3 @@ Default ports:
 
 ---
 
-Made with ❤️ for civic problem solving 🇮🇳

@@ -268,6 +268,12 @@ const statusOptions = [
   { value: 'rejected', label: 'Rejected', color: 'bg-red-500', desc: 'Complaint cannot be addressed' },
 ];
 
+const normalizeStatus = (status) => String(status || '').trim().toLowerCase().replace(/\s+/g, '_');
+
+const isPendingStatus = (status) => ['pending', 'submitted', 'acknowledged'].includes(normalizeStatus(status));
+const isInProgressStatus = (status) => ['assigned', 'in_progress', 'under_inspection', 'work_scheduled'].includes(normalizeStatus(status));
+const isResolvedStatus = (status) => ['resolved', 'closed', 'final_resolution'].includes(normalizeStatus(status));
+
 export default function OfficialPortal({ user, onLogout }) {
   // Get complaints from store (includes demo complaints)
   const { complaints: storeComplaints, updateComplaintStatus: storeUpdateStatus } = useComplaintsStore();
@@ -324,9 +330,9 @@ export default function OfficialPortal({ user, onLogout }) {
       }));
       
       setComplaints(enhanced);
-      const pending = enhanced.filter(c => ['pending','Pending','Submitted','acknowledged'].includes(c.status)).length;
-      const inProg = enhanced.filter(c => ['in_progress', 'In Progress', 'under_inspection', 'work_scheduled', 'Assigned'].includes(c.status)).length;
-      const resolved = enhanced.filter(c => ['resolved','Resolved','closed','Closed'].includes(c.status)).length;
+      const pending = enhanced.filter(c => isPendingStatus(c.status)).length;
+      const inProg = enhanced.filter(c => isInProgressStatus(c.status)).length;
+      const resolved = enhanced.filter(c => isResolvedStatus(c.status)).length;
       
       setStats({
         assigned: pending + inProg,
@@ -413,9 +419,9 @@ export default function OfficialPortal({ user, onLogout }) {
         }
       ];
       setComplaints(fallbackComplaints);
-      const pending = fallbackComplaints.filter(c => c.status === 'pending' || c.status === 'acknowledged').length;
-      const inProg = fallbackComplaints.filter(c => ['in_progress', 'under_inspection', 'work_scheduled'].includes(c.status)).length;
-      const resolved = fallbackComplaints.filter(c => c.status === 'resolved').length;
+      const pending = fallbackComplaints.filter(c => isPendingStatus(c.status)).length;
+      const inProg = fallbackComplaints.filter(c => isInProgressStatus(c.status)).length;
+      const resolved = fallbackComplaints.filter(c => isResolvedStatus(c.status)).length;
       setStats({ 
         assigned: pending + inProg, 
         pending, 
@@ -489,13 +495,13 @@ export default function OfficialPortal({ user, onLogout }) {
     // Filter by tab
     switch (activeTab) {
       case 'pending':
-        filtered = filtered.filter(c => c.status === 'pending' || c.status === 'acknowledged');
+        filtered = filtered.filter(c => isPendingStatus(c.status));
         break;
       case 'in_progress':
-        filtered = filtered.filter(c => ['in_progress', 'under_inspection', 'work_scheduled'].includes(c.status));
+        filtered = filtered.filter(c => isInProgressStatus(c.status));
         break;
       case 'resolved':
-        filtered = filtered.filter(c => c.status === 'resolved');
+        filtered = filtered.filter(c => isResolvedStatus(c.status));
         break;
       default:
         break;
@@ -559,7 +565,7 @@ export default function OfficialPortal({ user, onLogout }) {
             </div>
           )}
           {/* Days elapsed badge */}
-          {complaint.daysElapsed && complaint.status !== 'resolved' && (
+          {complaint.daysElapsed && !isResolvedStatus(complaint.status) && (
             <div className={`absolute bottom-2 left-2 px-2 py-1 rounded text-xs font-bold text-white ${
               complaint.daysElapsed > 5 ? 'bg-red-500' : complaint.daysElapsed > 3 ? 'bg-orange-500' : 'bg-green-500'
             }`}>
@@ -579,10 +585,10 @@ export default function OfficialPortal({ user, onLogout }) {
               <p className="text-gray-800 font-medium mt-1">{complaint.categoryLabel}</p>
             </div>
             <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-              complaint.status === 'resolved' ? 'bg-green-100 text-green-700' :
-              complaint.status === 'in_progress' ? 'bg-orange-100 text-orange-700' :
-              complaint.status === 'under_inspection' ? 'bg-purple-100 text-purple-700' :
-              complaint.status === 'work_scheduled' ? 'bg-indigo-100 text-indigo-700' :
+              isResolvedStatus(complaint.status) ? 'bg-green-100 text-green-700' :
+              normalizeStatus(complaint.status) === 'in_progress' ? 'bg-orange-100 text-orange-700' :
+              normalizeStatus(complaint.status) === 'under_inspection' ? 'bg-purple-100 text-purple-700' :
+              normalizeStatus(complaint.status) === 'work_scheduled' ? 'bg-indigo-100 text-indigo-700' :
               'bg-yellow-100 text-yellow-700'
             }`}>
               {complaint.status?.replace(/_/g, ' ').toUpperCase()}
@@ -623,7 +629,7 @@ export default function OfficialPortal({ user, onLogout }) {
               <MapPin size={14} />
               Track Location
             </button>
-            {complaint.status !== 'resolved' && (
+            {!isResolvedStatus(complaint.status) && (
               <>
                 <button
                   onClick={() => setUpdateModal(complaint)}
@@ -1007,10 +1013,10 @@ export default function OfficialPortal({ user, onLogout }) {
                     <p className="text-gray-600 font-medium">{selectedComplaint.categoryLabel}</p>
                   </div>
                   <span className={`px-4 py-1.5 rounded-full text-sm font-semibold ${
-                    selectedComplaint.status === 'resolved' ? 'bg-green-100 text-green-700' :
-                    selectedComplaint.status === 'in_progress' ? 'bg-orange-100 text-orange-700' :
-                    selectedComplaint.status === 'under_inspection' ? 'bg-purple-100 text-purple-700' :
-                    selectedComplaint.status === 'work_scheduled' ? 'bg-indigo-100 text-indigo-700' :
+                    isResolvedStatus(selectedComplaint.status) ? 'bg-green-100 text-green-700' :
+                    normalizeStatus(selectedComplaint.status) === 'in_progress' ? 'bg-orange-100 text-orange-700' :
+                    normalizeStatus(selectedComplaint.status) === 'under_inspection' ? 'bg-purple-100 text-purple-700' :
+                    normalizeStatus(selectedComplaint.status) === 'work_scheduled' ? 'bg-indigo-100 text-indigo-700' :
                     'bg-yellow-100 text-yellow-700'
                   }`}>
                     {selectedComplaint.status?.replace(/_/g, ' ').toUpperCase()}
@@ -1157,7 +1163,7 @@ export default function OfficialPortal({ user, onLogout }) {
                 >
                   Close
                 </button>
-                {selectedComplaint.status !== 'resolved' && (
+                {!isResolvedStatus(selectedComplaint.status) && (
                   <>
                     <button
                       onClick={() => {

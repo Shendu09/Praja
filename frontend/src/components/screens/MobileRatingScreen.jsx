@@ -154,17 +154,30 @@ export default function MobileRatingScreen() {
           isAnonymous: true
         })
       });
-      
-      const data = await response.json();
-      
-      if (data.success) {
+
+      const contentType = response.headers.get('content-type') || '';
+      let data = null;
+
+      if (contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        const text = await response.text();
+        data = { message: text?.trim() || null };
+      }
+
+      if (!response.ok) {
+        setError(data?.message || `Submission failed (${response.status})`);
+        return;
+      }
+
+      if (data?.success) {
         setSubmitted(true);
       } else {
-        setError(data.message || 'Submission failed');
+        setError(data?.message || 'Submission failed');
       }
     } catch (err) {
       console.error('Rating submission error:', err);
-      setError('Submission failed. Please try again.');
+      setError(err?.message || 'Submission failed. Please try again.');
     } finally {
       setSubmitting(false);
     }

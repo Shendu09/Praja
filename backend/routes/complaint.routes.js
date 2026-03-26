@@ -1,4 +1,5 @@
 import express from 'express';
+import fs from 'fs';
 import {
   createComplaint,
   getComplaints,
@@ -16,6 +17,7 @@ import {
 } from '../controllers/complaint.controller.js';
 import { protect, authorize, optionalAuth } from '../middleware/auth.middleware.js';
 import { upload, handleMulterError } from '../middleware/upload.middleware.js';
+import { verifyUploadedImage } from '../middleware/imageVerification.js';
 import {
   createComplaintValidation,
   updateComplaintValidation,
@@ -34,12 +36,31 @@ router.get('/nearby', getNearbyComplaints);
 // Duplicate check route (public, no auth needed for checking)
 router.post('/check-duplicate', checkDuplicate);
 
+// Verify uploaded image before complaint submission
+router.post(
+  '/verify-image',
+  upload.single('photo'),
+  handleMulterError,
+  verifyUploadedImage,
+  (req, res) => {
+    if (req.file?.path) {
+      fs.unlink(req.file.path, () => {});
+    }
+    res.json({
+      success: true,
+      message: 'Photo verified as real image',
+      metadata: req.imageMetadata || {}
+    });
+  }
+);
+
 // Protected routes
 router.post(
   '/',
   protect,
   upload.single('photo'),
   handleMulterError,
+  verifyUploadedImage,
   createComplaintValidation,
   createComplaint
 );

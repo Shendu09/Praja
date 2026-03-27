@@ -59,11 +59,11 @@ threading.Thread(target=_load_model, daemon=True).start()
 # ── Text prompts ──────────────────────────────────────────────────────────────
 
 TARGET_CLASS_PROMPTS = [
-    ("Waste Management", "a real photo of garbage piled on street, trash dump, littered public place, waste management issue"),
-    ("Sanitation", "a real photo of dirty public toilet, unclean toilet area, unhygienic restroom in public place"),
-    ("Sanitation", "a real photo of dirty road with filth, sewage, unhygienic waste on street"),
-    ("Road & Infrastructure", "a real photo of pothole on road, damaged asphalt, broken road surface"),
-    ("Public Safety", "a real photo of stray dogs on street causing public nuisance or safety concern"),
+    ("Waste Management", "a real photo or screenshot showing garbage piled on street, trash dump, littered public place, waste management issue"),
+    ("Sanitation", "a real photo or screenshot showing dirty public toilet, unclean toilet area, unhygienic restroom in public place"),
+    ("Sanitation", "a real photo or screenshot showing dirty road with filth, sewage, unhygienic waste on street"),
+    ("Road & Infrastructure", "a real photo or screenshot showing pothole on road, damaged asphalt, broken road surface"),
+    ("Public Safety", "a real photo or screenshot showing stray dogs on street causing public nuisance or safety concern"),
 ]
 
 NON_TARGET_PROMPTS = [
@@ -80,6 +80,12 @@ REAL_PHOTO_PROMPTS = [
     "a real smartphone photo taken in the real world",
     "an authentic camera photo of a real street scene",
     "an unedited real-life photo with natural lighting",
+]
+
+SCREENSHOT_PROMPTS = [
+    "a genuine mobile screenshot of a civic problem report",
+    "a screenshot from social media or messaging app showing a real civic issue",
+    "a screenshot containing a real street issue like garbage, pothole, or sanitation problem",
 ]
 
 AI_GENERATED_PROMPTS = [
@@ -119,6 +125,8 @@ AI_GENERATED_THRESHOLD = 0.42
 AI_VS_REAL_GAP = 0.08
 AI_LIKELIHOOD_THRESHOLD = 0.50
 WATERMARK_THRESHOLD = 0.32
+SCREENSHOT_THRESHOLD = 0.30
+AI_VS_AUTHENTIC_GAP = 0.10
 
 # ── Helper ────────────────────────────────────────────────────────────────────
 
@@ -180,27 +188,37 @@ async def analyze(file: UploadFile = File(...)):
 
     # ── Stage 0: authenticity check (real photo vs AI-generated) ────────────
     real_probs = clip_probs(image, REAL_PHOTO_PROMPTS)
+    screenshot_probs = clip_probs(image, SCREENSHOT_PROMPTS)
     ai_probs = clip_probs(image, AI_GENERATED_PROMPTS)
     watermark_probs = clip_probs(image, AI_WATERMARK_PROMPTS)
 
     best_real_prob = max(real_probs)
+    best_screenshot_prob = max(screenshot_probs)
+    best_authentic_prob = max(best_real_prob, best_screenshot_prob)
     best_ai_prob = max(ai_probs)
     best_watermark_prob = max(watermark_probs)
+    is_likely_screenshot = best_screenshot_prob >= SCREENSHOT_THRESHOLD
 
-    ai_likelihood = best_ai_prob / (best_ai_prob + best_real_prob + 1e-6)
+    ai_likelihood = best_ai_prob / (best_ai_prob + best_real_prob + best_screenshot_prob + 1e-6)
 
     is_likely_ai_generated = (
         (
             best_ai_prob >= AI_GENERATED_THRESHOLD
-            and (best_ai_prob - best_real_prob) >= AI_VS_REAL_GAP
+            and (best_ai_prob - best_authentic_prob) >= AI_VS_AUTHENTIC_GAP
         )
-        or ai_likelihood >= AI_LIKELIHOOD_THRESHOLD
+        or (
+            ai_likelihood >= AI_LIKELIHOOD_THRESHOLD
+            and not is_likely_screenshot
+            and (best_ai_prob - best_authentic_prob) >= AI_VS_REAL_GAP
+        )
         or best_watermark_prob >= WATERMARK_THRESHOLD
     )
 
     authenticity = {
         "isLikelyAIGenerated": is_likely_ai_generated,
         "realPhotoConfidence": int(best_real_prob * 100),
+        "screenshotConfidence": int(best_screenshot_prob * 100),
+        "isLikelyScreenshot": is_likely_screenshot,
         "aiGeneratedConfidence": int(best_ai_prob * 100),
         "aiLikelihood": round(ai_likelihood, 3),
         "watermarkConfidence": int(best_watermark_prob * 100),
@@ -213,7 +231,7 @@ async def analyze(file: UploadFile = File(...)):
             "mainSubject": "Likely synthetic image",
             "reason": (
                 "This image appears to be AI-generated or synthetic. "
-                "Please upload a real camera photo of the actual issue location."
+                "Please upload a real camera photo or a genuine screenshot of the actual issue."
             ),
             "authenticity": authenticity,
         }

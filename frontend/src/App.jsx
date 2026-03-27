@@ -13,8 +13,8 @@ const MobileRatingScreen = lazy(() => import('./components/screens/MobileRatingS
 import SplashScreen from './components/screens/SplashScreen';
 import RoleSelectionScreen from './components/screens/RoleSelectionScreen';
 import OTPAuthScreen from './components/screens/OTPAuthScreen';
-import AdminPortal from './components/screens/AdminPortal';
-import OfficialPortal from './components/screens/OfficialPortal';
+const AdminPortal = lazy(() => import('./components/screens/AdminPortal'));
+const OfficialPortal = lazy(() => import('./components/screens/OfficialPortal'));
 
 // Citizen Portal Components
 import PhoneShell from './components/PhoneShell';
@@ -208,11 +208,19 @@ function MainApp() {
         const role = user?.role || selectedRole || 'citizen';
         
         if (role === 'admin') {
-          return <AdminPortal user={user} onLogout={handleLogout} />;
+          return (
+            <Suspense fallback={<RatingLoadingFallback />}>
+              <AdminPortal user={user} onLogout={handleLogout} />
+            </Suspense>
+          );
         }
         
         if (role === 'official') {
-          return <OfficialPortal user={user} onLogout={handleLogout} />;
+          return (
+            <Suspense fallback={<RatingLoadingFallback />}>
+              <OfficialPortal user={user} onLogout={handleLogout} />
+            </Suspense>
+          );
         }
         
         // Default: Citizen portal

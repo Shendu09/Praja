@@ -38,7 +38,7 @@ export default function SplashScreen({ onComplete }) {
 
       {/* Main Card */}
       <motion.div
-        initial={{ opacity: 0, y: 20, scale: 0.95 }}
+        initial={false}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.6 }}
         className="relative"
@@ -53,7 +53,7 @@ export default function SplashScreen({ onComplete }) {
           <div className="relative px-10 py-12">
             {/* Main Title - Hindi */}
             <motion.h1
-              initial={{ opacity: 0, y: 10 }}
+              initial={false}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
               className="text-5xl md:text-6xl font-bold text-center text-white/90 mb-4"
@@ -64,7 +64,7 @@ export default function SplashScreen({ onComplete }) {
 
             {/* Subtitle */}
             <motion.p
-              initial={{ opacity: 0 }}
+              initial={false}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.5 }}
               className="text-center text-white/60 text-sm tracking-[0.3em] uppercase mb-10"
@@ -99,7 +99,7 @@ export default function SplashScreen({ onComplete }) {
 
       {/* Digital India Badge */}
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
+        initial={false}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.8 }}
         className="mt-10"

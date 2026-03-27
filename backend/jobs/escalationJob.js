@@ -35,7 +35,14 @@ export const startEscalationJob = async () => {
   });
 
   console.log('[Escalation Job] Scheduled successfully - Will run daily at 00:00 (Asia/Kolkata timezone)');
-  console.log('[Escalation Job] Next scheduled run:', cronTask.nextDate().toString());
+  // Note: nextDate() might not be available depending on node-cron version
+  try {
+    if (cronTask.nextDate && typeof cronTask.nextDate === 'function') {
+      console.log('[Escalation Job] Next scheduled run:', cronTask.nextDate().toString());
+    }
+  } catch (error) {
+    console.log('[Escalation Job] Could not determine next run date');
+  }
 
   return cronTask;
 };

@@ -18,7 +18,7 @@ const NotificationPopup = () => {
       return;
     }
 
-    const socketURL = process.env.REACT_APP_API_URL || 'http://localhost:5001';
+    const socketURL = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5001';
     const newSocket = io(socketURL, {
       reconnection: true,
       reconnectionDelay: 1000,

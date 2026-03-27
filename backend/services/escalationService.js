@@ -1,5 +1,5 @@
 import Complaint from '../models/Complaint.model.js';
-import { notifyUser } from './notification.service.js';
+import { sendRealTimeNotification } from './realtimeNotification.service.js';
 
 /**
  * Escalation thresholds based on severity
@@ -80,12 +80,11 @@ export const checkAndEscalateComplaints = async () => {
           // Notify the citizen
           try {
             if (complaint.user) {
-              await notifyUser(complaint.user._id, {
+              await sendRealTimeNotification(complaint.user._id, {
                 type: 'warning',
                 title: '⚠️ Complaint Escalated',
                 message: `Your complaint "${complaint.categoryLabel}" has been escalated to senior authorities due to delay`,
-                complaintId: complaint._id,
-                category: 'escalation'
+                complaintId: complaint._id
               });
             }
           } catch (notifyError) {
